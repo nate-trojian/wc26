@@ -100,9 +100,15 @@ input:focus {
   outline: 3px solid rgba(31, 122, 87, 0.18);
 }
 
+input:disabled {
+  background: #f1f2ed;
+  color: #7a837d;
+}
+
 .login-row button,
 .account button,
-.save-button {
+.save-button,
+.view-tabs button {
   background: #1f7a57;
   border-radius: 6px;
   color: #fff;
@@ -110,10 +116,18 @@ input:focus {
   padding: 12px 16px;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
   margin: 0 auto;
   max-width: 1180px;
-  padding: 28px 20px 56px;
+  padding: 28px 20px;
 }
 
 .topbar,
@@ -158,7 +172,8 @@ input:focus {
   padding: 18px;
 }
 
-.summary-band > div:not(.progress-track) {
+.summary-band > div:not(.progress-track),
+.leaderboard-summary > div {
   display: grid;
   gap: 2px;
   min-width: 70px;
@@ -184,12 +199,36 @@ input:focus {
   height: 100%;
 }
 
+.section-toolbar {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
 .set-tabs {
   display: flex;
   gap: 8px;
-  margin-bottom: 18px;
   overflow-x: auto;
   padding-bottom: 4px;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.view-tabs button {
+  background: #ffffff;
+  border: 1px solid #dde1dc;
+  color: #3d4942;
+}
+
+.view-tabs button.active {
+  background: #1f7a57;
+  color: #ffffff;
 }
 
 .set-tabs button {
@@ -220,9 +259,56 @@ input:focus {
   color: #9d3d1b;
 }
 
+.deadline-band {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dde1dc;
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  min-height: 45px;
+  padding: 14px 16px;
+  white-space: nowrap;
+}
+
+.deadline-band span {
+  color: #69736d;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.deadline-band strong {
+  color: #17211b;
+  font-size: 1rem;
+}
+
+.deadline-band.closed {
+  border-color: #e2a38d;
+}
+
+.deadline-band.closed strong {
+  color: #9d3d1b;
+}
+
 .games-list {
   display: grid;
   gap: 10px;
+}
+
+.matches-separator {
+  border-top: 1px solid #dde1dc;
+  margin-bottom: 14px;
+  margin-top: 2px;
+}
+
+.matches-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 10px 28px;
+  scrollbar-gutter: stable;
 }
 
 .game-card {
@@ -289,19 +375,100 @@ input:focus {
   min-width: 82px;
 }
 
+.leaderboard-summary {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dde1dc;
+  border-radius: 8px;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding: 18px;
+}
+
+.leaderboard-summary p {
+  color: #69736d;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.leaderboard-table-wrap {
+  background: #ffffff;
+  border: 1px solid #dde1dc;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.leaderboard-table {
+  border-collapse: collapse;
+  min-width: 680px;
+  width: 100%;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  border-bottom: 1px solid #edf0ec;
+  padding: 14px 16px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.leaderboard-table th {
+  color: #69736d;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.leaderboard-table td {
+  font-weight: 800;
+}
+
+.leaderboard-table td span {
+  color: #69736d;
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 500;
+  margin-top: 3px;
+}
+
+.leaderboard-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.leaderboard-table tr.current-user td {
+  background: #f0f7f3;
+}
+
+.rank-cell {
+  color: #c44f26;
+  width: 72px;
+}
+
 @media (max-width: 720px) {
   .login-row,
   .prediction-grid,
   .topbar,
-  .summary-band {
+  .summary-band,
+  .leaderboard-summary {
     grid-template-columns: 1fr;
   }
 
   .login-row,
   .topbar,
-  .summary-band {
+  .summary-band,
+  .leaderboard-summary {
     align-items: stretch;
     display: grid;
+  }
+
+  .section-toolbar {
+    display: grid;
+  }
+
+  .deadline-band {
+    justify-content: space-between;
+    white-space: normal;
   }
 
   .account {

@@ -1,6 +1,6 @@
-export const allowedEmails = [
-  "you@example.com",
-] as const;
+import { participants } from "./participants";
+
+export const allowedEmails = participants.map((participant) => participant.email);
 
 export function normalizeEmail(email: string) {
   return email.trim().toLowerCase();

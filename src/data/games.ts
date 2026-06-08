@@ -3,7 +3,7 @@ import type { GameSet } from "../types";
 export const gameSets = [
   {
     "id": "first",
-    "name": "First Games",
+    "name": "First Matches",
     "games": [
       {
         "id": "g01",
@@ -225,7 +225,7 @@ export const gameSets = [
   },
   {
     "id": "second",
-    "name": "Second Games",
+    "name": "Second Matches",
     "games": [
       {
         "id": "g25",
@@ -447,7 +447,7 @@ export const gameSets = [
   },
   {
     "id": "third",
-    "name": "Third Set of Games",
+    "name": "Third Matches",
     "games": [
       {
         "id": "g49",
