@@ -178,7 +178,8 @@ button:disabled {
 
 .account span {
   color: #3d4942;
-  font-size: 0.69rem;
+  font-size: 0.78rem;
+  font-weight: 800;
   max-width: 32vw;
   overflow: hidden;
   padding-left: 6px;
@@ -612,6 +613,17 @@ button:disabled {
     display: grid;
   }
 
+  .summary-band {
+    align-items: center;
+    column-gap: 12px;
+    grid-template-columns: minmax(70px, max-content) minmax(70px, max-content) minmax(80px, 1fr);
+    row-gap: 14px;
+  }
+
+  .summary-band .deadline-band {
+    grid-column: 1 / -1;
+  }
+
   .section-toolbar {
     display: grid;
   }
@@ -623,6 +635,44 @@ button:disabled {
     padding-left: 0;
     padding-top: 11px;
     white-space: normal;
+  }
+
+  .games-list {
+    gap: 8px;
+    width: calc(100vw - 62px);
+  }
+
+  .game-card {
+    gap: 12px;
+    padding: 13px;
+  }
+
+  .game-meta,
+  .game-actions {
+    font-size: 0.78rem;
+    gap: 8px;
+  }
+
+  .final-score,
+  .predicted-outcome,
+  .points-earned {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .final-score span,
+  .predicted-outcome span,
+  .points-earned span {
+    font-size: 0.7rem;
+  }
+
+  .final-score strong,
+  .predicted-outcome strong {
+    font-size: 0.9rem;
+  }
+
+  .points-earned strong {
+    font-size: 0.98rem;
   }
 
   .final-score {
@@ -656,6 +706,21 @@ button:disabled {
 
   .prediction-grid {
     align-items: stretch;
+    gap: 10px;
+  }
+
+  .team-score {
+    gap: 3px;
+  }
+
+  .team-score .team-link {
+    font-size: 0.94rem;
+    min-height: 2.2em;
+  }
+
+  .team-score input {
+    font-size: 1rem;
+    height: 42px;
   }
 
   .versus {
