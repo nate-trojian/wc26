@@ -1,4 +1,4 @@
-import { list, put } from "@vercel/blob";
+import { get, put, type BlobAccessType } from "@vercel/blob";
 import { normalizeEmail } from "../src/config/allowedEmails.js";
 import type { PredictionsByGame } from "../src/types.js";
 
@@ -22,33 +22,50 @@ function blobAuthOptions() {
   return token ? { token } : {};
 }
 
+function primaryBlobAccess(): BlobAccessType {
+  return process.env.PREDICTIONS_BLOB_ACCESS === "public" ? "public" : "private";
+}
+
+function alternateBlobAccess(access: BlobAccessType): BlobAccessType {
+  return access === "private" ? "public" : "private";
+}
+
+async function withBlobAccessFallback<T>(operation: (access: BlobAccessType) => Promise<T>) {
+  const primaryAccess = primaryBlobAccess();
+
+  try {
+    return await operation(primaryAccess);
+  } catch (primaryError) {
+    try {
+      return await operation(alternateBlobAccess(primaryAccess));
+    } catch {
+      throw primaryError;
+    }
+  }
+}
+
 function storageError(error: unknown) {
   if (error instanceof PredictionStorageError) {
     return error;
   }
 
   console.error("Prediction storage failed", error);
-  return new PredictionStorageError(
-    "Prediction storage is unavailable. Check the Vercel Blob store for this deployment.",
-  );
+  const message = error instanceof Error ? error.message : "Check the Vercel Blob store for this deployment.";
+  return new PredictionStorageError(`Prediction storage is unavailable. ${message}`);
 }
 
 export async function readPredictions(email: string): Promise<PredictionsByGame> {
   try {
     const pathname = predictionPath(email);
-    const existing = await list({ prefix: pathname, limit: 1, ...blobAuthOptions() });
-    const match = existing.blobs.find((blob) => blob.pathname === pathname);
+    const saved = await withBlobAccessFallback((access) =>
+      get(pathname, { access, useCache: false, ...blobAuthOptions() }),
+    );
 
-    if (!match) {
+    if (!saved) {
       return {};
     }
 
-    const result = await fetch(match.url);
-    if (!result.ok) {
-      throw new PredictionStorageError(`Could not load saved predictions for ${normalizeEmail(email)}.`);
-    }
-
-    return (await result.json()) as PredictionsByGame;
+    return (await new Response(saved.stream).json()) as PredictionsByGame;
   } catch (error) {
     throw storageError(error);
   }
@@ -56,12 +73,14 @@ export async function readPredictions(email: string): Promise<PredictionsByGame>
 
 export async function savePredictions(email: string, predictions: PredictionsByGame) {
   try {
-    await put(predictionPath(email), JSON.stringify(predictions, null, 2), {
-      access: "public",
-      allowOverwrite: true,
-      contentType: "application/json",
-      ...blobAuthOptions(),
-    });
+    await withBlobAccessFallback((access) =>
+      put(predictionPath(email), JSON.stringify(predictions, null, 2), {
+        access,
+        allowOverwrite: true,
+        contentType: "application/json",
+        ...blobAuthOptions(),
+      }),
+    );
   } catch (error) {
     throw storageError(error);
   }
