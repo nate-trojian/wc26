@@ -44,6 +44,38 @@ async function withBlobAccessFallback<T>(operation: (access: BlobAccessType) => 
   }
 }
 
+async function readWithAccessFallback(pathname: string) {
+  const primaryAccess = primaryBlobAccess();
+  const alternateAccess = alternateBlobAccess(primaryAccess);
+
+  try {
+    const saved = await get(pathname, {
+      access: primaryAccess,
+      useCache: false,
+      ...blobAuthOptions(),
+    });
+    if (saved) {
+      return saved;
+    }
+
+    return await get(pathname, {
+      access: alternateAccess,
+      useCache: false,
+      ...blobAuthOptions(),
+    });
+  } catch (primaryError) {
+    try {
+      return await get(pathname, {
+        access: alternateAccess,
+        useCache: false,
+        ...blobAuthOptions(),
+      });
+    } catch {
+      throw primaryError;
+    }
+  }
+}
+
 function storageError(error: unknown) {
   if (error instanceof PredictionStorageError) {
     return error;
@@ -57,9 +89,7 @@ function storageError(error: unknown) {
 export async function readPredictions(email: string): Promise<PredictionsByGame> {
   try {
     const pathname = predictionPath(email);
-    const saved = await withBlobAccessFallback((access) =>
-      get(pathname, { access, useCache: false, ...blobAuthOptions() }),
-    );
+    const saved = await readWithAccessFallback(pathname);
 
     if (!saved) {
       return {};
