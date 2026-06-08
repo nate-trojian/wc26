@@ -152,8 +152,41 @@ function sectionIsClosed(set: GameSet) {
   return deadline ? Date.now() >= deadline.getTime() : false;
 }
 
-function setMessage(message: string) {
+function gameCardSelector(gameId: string) {
+  return `[data-game-card-id="${CSS.escape(gameId)}"]`;
+}
+
+function gameCardTop(gameId: string) {
+  return document.querySelector<HTMLElement>(gameCardSelector(gameId))?.getBoundingClientRect().top;
+}
+
+function renderKeepingGameInPlace(gameId: string, targetTop = gameCardTop(gameId)) {
+  const beforeCard = document.querySelector<HTMLElement>(gameCardSelector(gameId));
+  const beforeTop = targetTop ?? beforeCard?.getBoundingClientRect().top;
+
+  render();
+
+  if (beforeTop === undefined) {
+    return;
+  }
+
+  const afterCard = document.querySelector<HTMLElement>(gameCardSelector(gameId));
+  const scroller = afterCard?.closest<HTMLElement>(".matches-scroll");
+
+  if (!afterCard || !scroller) {
+    return;
+  }
+
+  scroller.scrollTop += afterCard.getBoundingClientRect().top - beforeTop;
+}
+
+function setMessage(message: string, anchoredGameId?: string, anchorTop?: number) {
   state.message = message;
+  if (anchoredGameId) {
+    renderKeepingGameInPlace(anchoredGameId, anchorTop);
+    return;
+  }
+
   render();
 }
 
@@ -265,16 +298,17 @@ async function savePrediction(game: Game) {
     return;
   }
 
+  const anchorTop = gameCardTop(game.id);
   const gameSet = gameSetForGame(game);
   const result = resultForGame(game.id);
   if (result) {
-    setMessage(`${game.homeTeam} vs ${game.awayTeam} is final. Predictions are locked.`);
+    setMessage(`${game.homeTeam} vs ${game.awayTeam} is final. Predictions are locked.`, game.id, anchorTop);
     return;
   }
 
   if (gameSet && sectionIsClosed(gameSet)) {
     const deadline = sectionDeadline(gameSet);
-    setMessage(`${gameSet.name} closed ${deadline ? formatDeadline(deadline) : "before kickoff"}.`);
+    setMessage(`${gameSet.name} closed ${deadline ? formatDeadline(deadline) : "before kickoff"}.`, game.id, anchorTop);
     return;
   }
 
@@ -284,12 +318,12 @@ async function savePrediction(game: Game) {
   const awayScore = Number(awayInput?.value);
 
   if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore) || homeScore < 0 || awayScore < 0) {
-    setMessage("Use whole-number scores.");
+    setMessage("Use whole-number scores.", game.id, anchorTop);
     return;
   }
 
   state.message = `Saving ${game.homeTeam} vs ${game.awayTeam}`;
-  render();
+  renderKeepingGameInPlace(game.id, anchorTop);
 
   if (runningStandaloneViteDev()) {
     state.predictions = {
@@ -303,7 +337,7 @@ async function savePrediction(game: Game) {
     saveLocalPredictions(state.email, state.predictions);
     state.leaderboardLoaded = false;
     state.message = "";
-    render();
+    renderKeepingGameInPlace(game.id, anchorTop);
     return;
   }
 
@@ -332,7 +366,7 @@ async function savePrediction(game: Game) {
   } catch (error) {
     state.message = error instanceof Error ? error.message : "Could not save prediction.";
   } finally {
-    render();
+    renderKeepingGameInPlace(game.id, anchorTop);
   }
 }
 
@@ -416,7 +450,7 @@ function renderGame(game: Game) {
     : "";
 
   return `
-    <article class="game-card ${isFinal ? "final" : ""}">
+    <article class="game-card ${isFinal ? "final" : ""}" data-game-card-id="${game.id}">
       <div class="game-meta">
         <span>Match ${game.matchNumber}</span>
         <time>${formatGameTime(game.dateTime)}</time>
