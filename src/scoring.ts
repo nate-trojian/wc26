@@ -1,4 +1,4 @@
-import type { GameResult, LeaderboardEntry, Participant, PredictionsByGame } from "./types";
+import type { GameResult, LeaderboardEntry, Participant, PredictionsByGame } from "./types.js";
 
 type PredictionsByEmail = Record<string, PredictionsByGame>;
 

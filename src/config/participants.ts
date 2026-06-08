@@ -1,4 +1,4 @@
-import type { Participant } from "../types";
+import type { Participant } from "../types.js";
 
 export const participants = [
   {

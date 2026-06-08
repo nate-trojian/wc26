@@ -1,6 +1,6 @@
 import { list, put } from "@vercel/blob";
-import { normalizeEmail } from "../src/config/allowedEmails";
-import type { PredictionsByGame } from "../src/types";
+import { normalizeEmail } from "../src/config/allowedEmails.js";
+import type { PredictionsByGame } from "../src/types.js";
 
 const storageUnavailableMessage =
   "Prediction storage is not configured. Connect a Vercel Blob store for this deployment.";

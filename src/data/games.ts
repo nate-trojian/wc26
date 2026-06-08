@@ -1,4 +1,4 @@
-import type { GameSet } from "../types";
+import type { GameSet } from "../types.js";
 
 export const gameSets = [
   {

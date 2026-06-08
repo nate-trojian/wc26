@@ -1,10 +1,10 @@
 import "./styles.css";
-import { isAllowedEmail, normalizeEmail } from "./config/allowedEmails";
-import { participants } from "./config/participants";
-import { gameSets } from "./data/games";
-import { matchResults } from "./data/results";
-import { buildLeaderboard } from "./scoring";
-import type { Game, GameResult, GameSet, LeaderboardEntry, PredictionsByGame } from "./types";
+import { isAllowedEmail, normalizeEmail } from "./config/allowedEmails.js";
+import { participants } from "./config/participants.js";
+import { gameSets } from "./data/games.js";
+import { matchResults } from "./data/results.js";
+import { buildLeaderboard } from "./scoring.js";
+import type { Game, GameResult, GameSet, LeaderboardEntry, PredictionsByGame } from "./types.js";
 
 const emailStorageKey = "wc26-email";
 const localPredictionsStoragePrefix = "wc26-local-predictions";

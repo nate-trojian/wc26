@@ -1,4 +1,4 @@
-import { participants } from "./participants";
+import { participants } from "./participants.js";
 
 export const allowedEmails = participants.map((participant) => participant.email);
 

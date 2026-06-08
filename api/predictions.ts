@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isAllowedEmail, normalizeEmail } from "../src/config/allowedEmails";
-import { gameSets } from "../src/data/games";
-import { matchResults } from "../src/data/results";
-import { predictionStorageErrorMessage, readPredictions, savePredictions } from "./predictionStore";
+import { isAllowedEmail, normalizeEmail } from "../src/config/allowedEmails.js";
+import { gameSets } from "../src/data/games.js";
+import { matchResults } from "../src/data/results.js";
+import { predictionStorageErrorMessage, readPredictions, savePredictions } from "./predictionStore.js";
 
 type PredictionInput = {
   gameId: string;

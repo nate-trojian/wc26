@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isAllowedEmail, normalizeEmail } from "../src/config/allowedEmails";
-import { participants } from "../src/config/participants";
-import { matchResults } from "../src/data/results";
-import { buildLeaderboard } from "../src/scoring";
-import { predictionStorageErrorMessage, readPredictions } from "./predictionStore";
+import { isAllowedEmail, normalizeEmail } from "../src/config/allowedEmails.js";
+import { participants } from "../src/config/participants.js";
+import { matchResults } from "../src/data/results.js";
+import { buildLeaderboard } from "../src/scoring.js";
+import { predictionStorageErrorMessage, readPredictions } from "./predictionStore.js";
 
 function sendError(response: VercelResponse, status: number, message: string) {
   response.status(status).json({ error: message });
