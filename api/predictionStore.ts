@@ -3,7 +3,7 @@ import { normalizeEmail } from "../src/config/allowedEmails";
 import type { PredictionsByGame } from "../src/types";
 
 const storageUnavailableMessage =
-  "Prediction storage is not configured. Connect a Vercel Blob store or set BLOB_READ_WRITE_TOKEN for this deployment.";
+  "Prediction storage is not configured. Connect a Vercel Blob store for this deployment.";
 
 export class PredictionStorageError extends Error {
   constructor(message = storageUnavailableMessage) {
@@ -17,13 +17,9 @@ function predictionPath(email: string) {
   return `predictions/${safeEmail}.json`;
 }
 
-function blobToken() {
+function blobAuthOptions() {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) {
-    throw new PredictionStorageError();
-  }
-
-  return token;
+  return token ? { token } : {};
 }
 
 function storageError(error: unknown) {
@@ -39,9 +35,8 @@ function storageError(error: unknown) {
 
 export async function readPredictions(email: string): Promise<PredictionsByGame> {
   try {
-    const token = blobToken();
     const pathname = predictionPath(email);
-    const existing = await list({ prefix: pathname, limit: 1, token });
+    const existing = await list({ prefix: pathname, limit: 1, ...blobAuthOptions() });
     const match = existing.blobs.find((blob) => blob.pathname === pathname);
 
     if (!match) {
@@ -65,7 +60,7 @@ export async function savePredictions(email: string, predictions: PredictionsByG
       access: "public",
       allowOverwrite: true,
       contentType: "application/json",
-      token: blobToken(),
+      ...blobAuthOptions(),
     });
   } catch (error) {
     throw storageError(error);
