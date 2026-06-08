@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { list, put } from "@vercel/blob";
 import { isAllowedEmail, normalizeEmail } from "../src/config/allowedEmails";
 import { gameSets } from "../src/data/games";
+import { matchResults } from "../src/data/results";
 import type { PredictionsByGame } from "../src/types";
 
 type PredictionInput = {
@@ -11,6 +12,7 @@ type PredictionInput = {
 };
 
 const gameIds = new Set(gameSets.flatMap((set) => set.games.map((game) => game.id)));
+const finalGameIds = new Set(matchResults.map((result) => result.gameId));
 
 function predictionPath(email: string) {
   const safeEmail = encodeURIComponent(normalizeEmail(email));
@@ -72,6 +74,10 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
     if (!validScore(input.homeScore) || !validScore(input.awayScore)) {
       return sendError(response, 400, "Scores must be whole numbers between 0 and 99.");
+    }
+
+    if (finalGameIds.has(input.gameId)) {
+      return sendError(response, 403, "This match is final. Predictions are locked.");
     }
 
     const predictions = await readPredictions(email);

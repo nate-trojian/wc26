@@ -1,10 +1,10 @@
 import "./styles.css";
 import { isAllowedEmail, normalizeEmail } from "./config/allowedEmails";
 import { participants } from "./config/participants";
-import { gameSets, totalGames } from "./data/games";
+import { gameSets } from "./data/games";
 import { matchResults } from "./data/results";
 import { buildLeaderboard } from "./scoring";
-import type { Game, GameSet, LeaderboardEntry, PredictionsByGame } from "./types";
+import type { Game, GameResult, GameSet, LeaderboardEntry, PredictionsByGame } from "./types";
 
 const emailStorageKey = "wc26-email";
 const localPredictionsStoragePrefix = "wc26-local-predictions";
@@ -88,6 +88,55 @@ function gameSetForGame(game: Game) {
   return gameSets.find((set) => set.games.some((item) => item.id === game.id));
 }
 
+function resultForGame(gameId: string): GameResult | undefined {
+  return matchResults.find((result) => result.gameId === gameId);
+}
+
+function scoreOutcome(homeScore: number, awayScore: number) {
+  return Math.sign(homeScore - awayScore);
+}
+
+function outcomeLabel(game: Game, homeScore: number, awayScore: number) {
+  const outcome = scoreOutcome(homeScore, awayScore);
+  if (outcome > 0) {
+    return `${game.homeTeam} win`;
+  }
+
+  if (outcome < 0) {
+    return `${game.awayTeam} win`;
+  }
+
+  return "Draw";
+}
+
+function pointsEarned(
+  prediction: { homeScore: number; awayScore: number } | undefined,
+  result: GameResult | undefined,
+) {
+  if (!prediction || !result) {
+    return 0;
+  }
+
+  const homeExact = prediction.homeScore === result.homeScore ? 1 : 0;
+  const awayExact = prediction.awayScore === result.awayScore ? 1 : 0;
+  const outcomeExact =
+    scoreOutcome(prediction.homeScore, prediction.awayScore) === scoreOutcome(result.homeScore, result.awayScore)
+      ? 1
+      : 0;
+
+  return homeExact + awayExact + outcomeExact;
+}
+
+function inputScore(input: HTMLInputElement | null) {
+  const value = input?.value.trim() ?? "";
+  if (value === "") {
+    return null;
+  }
+
+  const score = Number(value);
+  return Number.isInteger(score) && score >= 0 ? score : null;
+}
+
 function sectionIsClosed(set: GameSet) {
   const deadline = sectionDeadline(set);
   return deadline ? Date.now() >= deadline.getTime() : false;
@@ -98,8 +147,8 @@ function setMessage(message: string) {
   render();
 }
 
-function completedCount() {
-  return Object.keys(state.predictions).length;
+function completedCount(games: readonly Game[]) {
+  return games.filter((game) => state.predictions[game.id]).length;
 }
 
 function runningStandaloneViteDev() {
@@ -207,6 +256,12 @@ async function savePrediction(game: Game) {
   }
 
   const gameSet = gameSetForGame(game);
+  const result = resultForGame(game.id);
+  if (result) {
+    setMessage(`${game.homeTeam} vs ${game.awayTeam} is final. Predictions are locked.`);
+    return;
+  }
+
   if (gameSet && sectionIsClosed(gameSet)) {
     const deadline = sectionDeadline(gameSet);
     setMessage(`${gameSet.name} closed ${deadline ? formatDeadline(deadline) : "before kickoff"}.`);
@@ -329,36 +384,103 @@ function renderLogin() {
 function renderGame(game: Game) {
   const prediction = state.predictions[game.id];
   const gameSet = gameSetForGame(game);
-  const closed = gameSet ? sectionIsClosed(gameSet) : false;
+  const result = resultForGame(game.id);
+  const isFinal = Boolean(result);
+  const closed = isFinal || (gameSet ? sectionIsClosed(gameSet) : false);
   const homeValue = prediction?.homeScore ?? "";
   const awayValue = prediction?.awayScore ?? "";
+  const homeResultClass =
+    result && prediction ? (prediction.homeScore === result.homeScore ? "score-correct" : "score-wrong") : "";
+  const awayResultClass =
+    result && prediction ? (prediction.awayScore === result.awayScore ? "score-correct" : "score-wrong") : "";
+  const predictedOutcome = prediction ? outcomeLabel(game, prediction.homeScore, prediction.awayScore) : "";
+  const outcomeResultClass =
+    result && prediction
+      ? scoreOutcome(prediction.homeScore, prediction.awayScore) === scoreOutcome(result.homeScore, result.awayScore)
+        ? "outcome-correct"
+        : "outcome-wrong"
+      : "";
+  const earnedPoints = pointsEarned(prediction, result);
   const savedLabel = prediction
     ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(prediction.updatedAt))
     : "";
 
   return `
-    <article class="game-card">
+    <article class="game-card ${isFinal ? "final" : ""}">
       <div class="game-meta">
         <span>Match ${game.matchNumber}</span>
         <time>${formatGameTime(game.dateTime)}</time>
       </div>
+      ${
+        result
+          ? `<div class="final-score" aria-label="Final score">
+              <span>Final</span>
+              <strong>${game.homeTeam} ${result.homeScore}-${result.awayScore} ${game.awayTeam}</strong>
+            </div>`
+          : ""
+      }
       <div class="prediction-grid">
         <label class="team-score">
           <span>${game.homeTeam}</span>
-          <input id="${game.id}-home" inputmode="numeric" type="number" min="0" max="99" value="${homeValue}" aria-label="${game.homeTeam} score" ${closed ? "disabled" : ""} />
+          <input class="${homeResultClass}" id="${game.id}-home" inputmode="numeric" type="number" min="0" max="99" value="${homeValue}" aria-label="${game.homeTeam} score" ${closed ? "disabled" : ""} />
         </label>
         <span class="versus">vs</span>
         <label class="team-score">
           <span>${game.awayTeam}</span>
-          <input id="${game.id}-away" inputmode="numeric" type="number" min="0" max="99" value="${awayValue}" aria-label="${game.awayTeam} score" ${closed ? "disabled" : ""} />
+          <input class="${awayResultClass}" id="${game.id}-away" inputmode="numeric" type="number" min="0" max="99" value="${awayValue}" aria-label="${game.awayTeam} score" ${closed ? "disabled" : ""} />
         </label>
       </div>
+      <div id="${game.id}-outcome" class="predicted-outcome ${outcomeResultClass}">
+        <span>Predicted outcome</span>
+        <strong>${predictedOutcome || "Not predicted"}</strong>
+      </div>
+      ${
+        result
+          ? `<div class="points-earned">
+              <span>Points earned</span>
+              <strong>${earnedPoints}/3</strong>
+            </div>`
+          : ""
+      }
       <div class="game-actions">
-        <span>${savedLabel ? `Saved ${savedLabel}` : "Not saved"}</span>
-        <button class="save-button" data-game-id="${game.id}" type="button" ${closed ? "disabled" : ""}>Save</button>
+        <span>${isFinal ? "Final score posted" : savedLabel ? `Saved ${savedLabel}` : "Not saved"}</span>
+        <button class="save-button" data-game-id="${game.id}" type="button" ${closed ? "disabled" : ""}>
+          ${isFinal ? "Locked" : "Save"}
+        </button>
       </div>
     </article>
   `;
+}
+
+function updatePredictedOutcome(game: Game) {
+  const homeScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-home`));
+  const awayScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-away`));
+  const outcome = document.querySelector<HTMLDivElement>(`#${game.id}-outcome`);
+  const outcomeValue = outcome?.querySelector("strong");
+
+  if (!outcome || !outcomeValue) {
+    return;
+  }
+
+  outcome.classList.remove("outcome-correct", "outcome-wrong");
+
+  if (homeScore === null || awayScore === null) {
+    outcomeValue.textContent = "Not predicted";
+    return;
+  }
+
+  outcomeValue.textContent = outcomeLabel(game, homeScore, awayScore);
+
+  const result = resultForGame(game.id);
+  if (!result) {
+    return;
+  }
+
+  outcome.classList.add(
+    scoreOutcome(homeScore, awayScore) === scoreOutcome(result.homeScore, result.awayScore)
+      ? "outcome-correct"
+      : "outcome-wrong",
+  );
 }
 
 function renderViewTabs() {
@@ -391,7 +513,6 @@ function renderLeaderboard() {
           <td>${entry.points}</td>
           <td>${entry.exactScores}</td>
           <td>${entry.outcomes}</td>
-          <td>${entry.predictedGames}</td>
         </tr>
       `,
     )
@@ -401,7 +522,7 @@ function renderLeaderboard() {
     <section class="leaderboard-summary">
       <div>
         <span class="summary-value">${state.resultsCount}</span>
-        <span class="summary-label">Finals</span>
+        <span class="summary-label">Games played</span>
       </div>
       <div>
         <span class="summary-value">${state.leaderboard.length}</span>
@@ -418,13 +539,12 @@ function renderLeaderboard() {
             <th>Rank</th>
             <th>Name</th>
             <th>Points</th>
-            <th>Scores</th>
+            <th>Exact scores</th>
             <th>Outcomes</th>
-            <th>Games</th>
           </tr>
         </thead>
         <tbody>
-          ${leaderRows || `<tr><td colspan="6">No leaderboard entries yet.</td></tr>`}
+          ${leaderRows || `<tr><td colspan="5">No leaderboard entries yet.</td></tr>`}
         </tbody>
       </table>
     </section>
@@ -435,7 +555,9 @@ function renderDashboard() {
   const activeSet = gameSets.find((set) => set.id === state.activeSetId) ?? gameSets[0];
   const activeDeadline = activeSet ? sectionDeadline(activeSet) : null;
   const activeSetClosed = activeSet ? sectionIsClosed(activeSet) : false;
-  const progress = Math.round((completedCount() / totalGames) * 100);
+  const activeSavedCount = activeSet ? completedCount(activeSet.games) : 0;
+  const activeGamesCount = activeSet?.games.length ?? 0;
+  const progress = activeGamesCount > 0 ? Math.round((activeSavedCount / activeGamesCount) * 100) : 0;
 
   app!.innerHTML = `
     <main class="app-shell">
@@ -449,20 +571,6 @@ function renderDashboard() {
           <button id="logout" type="button">Log Out</button>
         </div>
       </header>
-
-      <section class="summary-band">
-        <div>
-          <span class="summary-value">${completedCount()}</span>
-          <span class="summary-label">Saved</span>
-        </div>
-        <div>
-          <span class="summary-value">${totalGames}</span>
-          <span class="summary-label">Games</span>
-        </div>
-        <div class="progress-track" aria-label="${progress}% complete">
-          <span style="width: ${progress}%"></span>
-        </div>
-      </section>
 
       ${renderViewTabs()}
 
@@ -490,6 +598,20 @@ function renderDashboard() {
           <strong>${activeDeadline ? formatDeadline(activeDeadline) : "TBD"}</strong>
         </section>
       </div>
+
+      <section class="summary-band">
+        <div>
+          <span class="summary-value">${activeSavedCount}</span>
+          <span class="summary-label">Saved</span>
+        </div>
+        <div>
+          <span class="summary-value">${activeGamesCount}</span>
+          <span class="summary-label">Games</span>
+        </div>
+        <div class="progress-track" aria-label="${progress}% complete">
+          <span style="width: ${progress}%"></span>
+        </div>
+      </section>
 
       ${state.loading ? `<p class="status">Loading</p>` : ""}
 
@@ -523,6 +645,14 @@ function renderDashboard() {
       if (game) {
         savePrediction(game);
       }
+    });
+  });
+  activeSet.games.forEach((game) => {
+    document.querySelector<HTMLInputElement>(`#${game.id}-home`)?.addEventListener("input", () => {
+      updatePredictedOutcome(game);
+    });
+    document.querySelector<HTMLInputElement>(`#${game.id}-away`)?.addEventListener("input", () => {
+      updatePredictedOutcome(game);
     });
   });
 }

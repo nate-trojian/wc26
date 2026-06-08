@@ -105,6 +105,20 @@ input:disabled {
   color: #7a837d;
 }
 
+input.score-correct,
+input.score-correct:disabled {
+  background: #e7f6ec;
+  border-color: #23935c;
+  color: #14613f;
+}
+
+input.score-wrong,
+input.score-wrong:disabled {
+  background: #fdeae5;
+  border-color: #c44f26;
+  color: #9d3d1b;
+}
+
 .login-row button,
 .account button,
 .save-button,
@@ -320,6 +334,10 @@ button:disabled {
   padding: 16px;
 }
 
+.game-card.final {
+  border-color: #cbd8cf;
+}
+
 .game-meta {
   gap: 12px;
   justify-content: space-between;
@@ -328,6 +346,30 @@ button:disabled {
 .game-meta span {
   color: #c44f26;
   font-weight: 900;
+}
+
+.final-score {
+  align-items: center;
+  background: #f3f7f2;
+  border: 1px solid #d7e3d7;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.final-score span {
+  color: #1f7a57;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.final-score strong {
+  color: #17211b;
+  font-size: 0.98rem;
+  text-align: right;
 }
 
 .prediction-grid {
@@ -363,6 +405,74 @@ button:disabled {
   font-weight: 900;
   text-align: center;
   text-transform: uppercase;
+}
+
+.predicted-outcome {
+  align-items: center;
+  background: #f8f7f2;
+  border: 1px solid #e4e3da;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.predicted-outcome span {
+  color: #69736d;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.predicted-outcome strong {
+  color: #17211b;
+  font-size: 0.98rem;
+  text-align: right;
+}
+
+.predicted-outcome.outcome-correct {
+  background: #e7f6ec;
+  border-color: #23935c;
+}
+
+.predicted-outcome.outcome-correct span,
+.predicted-outcome.outcome-correct strong {
+  color: #14613f;
+}
+
+.predicted-outcome.outcome-wrong {
+  background: #fdeae5;
+  border-color: #c44f26;
+}
+
+.predicted-outcome.outcome-wrong span,
+.predicted-outcome.outcome-wrong strong {
+  color: #9d3d1b;
+}
+
+.points-earned {
+  align-items: center;
+  background: #f8f7f2;
+  border: 1px solid #e4e3da;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.points-earned span {
+  color: #69736d;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.points-earned strong {
+  color: #17211b;
+  font-size: 1.08rem;
+  text-align: right;
 }
 
 .game-actions {
@@ -469,6 +579,27 @@ button:disabled {
   .deadline-band {
     justify-content: space-between;
     white-space: normal;
+  }
+
+  .final-score {
+    align-items: start;
+    display: grid;
+  }
+
+  .predicted-outcome {
+    align-items: start;
+    display: grid;
+  }
+
+  .points-earned {
+    align-items: start;
+    display: grid;
+  }
+
+  .final-score strong,
+  .predicted-outcome strong,
+  .points-earned strong {
+    text-align: left;
   }
 
   .account {

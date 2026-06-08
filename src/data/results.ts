@@ -1,6 +1,6 @@
 import type { GameResult } from "../types";
 
-export const matchResults = [
+export const matchResults: readonly GameResult[] = [
   // Add completed matches here as final scores become available.
-  // Example: { gameId: "g01", homeScore: 2, awayScore: 1 },
-] satisfies GameResult[];
+  { gameId: "g01", homeScore: 1, awayScore: 1 },
+];
