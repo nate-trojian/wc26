@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { get, put, type BlobAccessType } from "@vercel/blob";
 import { normalizeEmail } from "../src/config/allowedEmails.js";
 import type { PredictionsByGame } from "../src/types.js";
@@ -12,9 +13,12 @@ export class PredictionStorageError extends Error {
   }
 }
 
+function hashedEmail(email: string) {
+  return createHash("sha256").update(normalizeEmail(email)).digest("hex");
+}
+
 function predictionPath(email: string) {
-  const safeEmail = encodeURIComponent(normalizeEmail(email));
-  return `predictions/${safeEmail}.json`;
+  return `predictions/${hashedEmail(email)}.json`;
 }
 
 function blobAuthOptions() {
@@ -88,9 +92,7 @@ function storageError(error: unknown) {
 
 export async function readPredictions(email: string): Promise<PredictionsByGame> {
   try {
-    const pathname = predictionPath(email);
-    const saved = await readWithAccessFallback(pathname);
-
+    const saved = await readWithAccessFallback(predictionPath(email));
     if (!saved) {
       return {};
     }
