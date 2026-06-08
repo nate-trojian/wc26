@@ -3,6 +3,7 @@ import { isAllowedEmail, normalizeEmail } from "./config/allowedEmails.js";
 import { participants } from "./config/participants.js";
 import { gameSets } from "./data/games.js";
 import { matchResults } from "./data/results.js";
+import { teamEspnLinks } from "./data/teamLinks.js";
 import { buildLeaderboard } from "./scoring.js";
 import type { Game, GameResult, GameSet, LeaderboardEntry, PredictionsByGame } from "./types.js";
 
@@ -125,6 +126,15 @@ function pointsEarned(
       : 0;
 
   return homeExact + awayExact + outcomeExact;
+}
+
+function renderTeamLink(teamId: number, teamName: string) {
+  const href = teamEspnLinks[teamId as keyof typeof teamEspnLinks];
+  if (!href) {
+    return `<span>${teamName}</span>`;
+  }
+
+  return `<a class="team-link" href="${href}" target="_blank" rel="noopener noreferrer">${teamName}</a>`;
 }
 
 function inputScore(input: HTMLInputElement | null) {
@@ -415,20 +425,24 @@ function renderGame(game: Game) {
         result
           ? `<div class="final-score" aria-label="Final score">
               <span>Final</span>
-              <strong>${game.homeTeam} ${result.homeScore}-${result.awayScore} ${game.awayTeam}</strong>
+              <strong>
+                ${renderTeamLink(game.homeTeamId, game.homeTeam)}
+                ${result.homeScore}-${result.awayScore}
+                ${renderTeamLink(game.awayTeamId, game.awayTeam)}
+              </strong>
             </div>`
           : ""
       }
       <div class="prediction-grid">
-        <label class="team-score">
-          <span>${game.homeTeam}</span>
+        <div class="team-score">
+          ${renderTeamLink(game.homeTeamId, game.homeTeam)}
           <input class="${homeResultClass}" id="${game.id}-home" inputmode="numeric" type="number" min="0" max="99" value="${homeValue}" aria-label="${game.homeTeam} score" ${closed ? "disabled" : ""} />
-        </label>
+        </div>
         <span class="versus">vs</span>
-        <label class="team-score">
-          <span>${game.awayTeam}</span>
+        <div class="team-score">
+          ${renderTeamLink(game.awayTeamId, game.awayTeam)}
           <input class="${awayResultClass}" id="${game.id}-away" inputmode="numeric" type="number" min="0" max="99" value="${awayValue}" aria-label="${game.awayTeam} score" ${closed ? "disabled" : ""} />
-        </label>
+        </div>
       </div>
       <div id="${game.id}-outcome" class="predicted-outcome ${outcomeResultClass}">
         <span>Predicted outcome</span>
@@ -592,11 +606,6 @@ function renderDashboard() {
             )
             .join("")}
         </nav>
-
-        <section class="deadline-band ${activeSetClosed ? "closed" : ""}">
-          <span>${activeSetClosed ? "Closed" : "Due"}</span>
-          <strong>${activeDeadline ? formatDeadline(activeDeadline) : "TBD"}</strong>
-        </section>
       </div>
 
       <section class="summary-band">
@@ -610,6 +619,10 @@ function renderDashboard() {
         </div>
         <div class="progress-track" aria-label="${progress}% complete">
           <span style="width: ${progress}%"></span>
+        </div>
+        <div class="deadline-band ${activeSetClosed ? "closed" : ""}">
+          <span>${activeSetClosed ? "Closed" : "Due"}</span>
+          <strong>${activeDeadline ? formatDeadline(activeDeadline) : "TBD"}</strong>
         </div>
       </section>
 
