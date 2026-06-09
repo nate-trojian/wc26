@@ -4,3 +4,4 @@ dist/
 .env
 .env.local
 allowlist.json
+access_tokens.txt
