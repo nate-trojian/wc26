@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isAllowedEmail, normalizeEmail } from "../src/config/allowedEmails.js";
-import { participants } from "../src/config/participants.js";
+import { normalizeEmail } from "../src/config/allowedEmails.js";
 import { matchResults } from "../src/data/results.js";
 import { buildLeaderboard } from "../src/scoring.js";
+import type { Participant } from "../src/types.js";
+import { allowlistStorageErrorMessage, readParticipants } from "./participantStore.js";
 import { predictionStorageErrorMessage, readPredictions } from "./predictionStore.js";
 
 function sendError(response: VercelResponse, status: number, message: string) {
@@ -16,8 +17,15 @@ export default async function handler(request: VercelRequest, response: VercelRe
   }
 
   const email = typeof request.query.email === "string" ? request.query.email : "";
-  if (!email || !isAllowedEmail(email)) {
-    return sendError(response, 403, "This email is not allowed to use the pool.");
+  let participants: readonly Participant[];
+  try {
+    participants = await readParticipants();
+    const normalizedEmail = normalizeEmail(email);
+    if (!email || !participants.some((participant) => participant.email === normalizedEmail)) {
+      return sendError(response, 403, "This email is not allowed to use the pool.");
+    }
+  } catch (error) {
+    return sendError(response, 503, allowlistStorageErrorMessage(error));
   }
 
   try {

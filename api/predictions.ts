@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { isAllowedEmail, normalizeEmail } from "../src/config/allowedEmails.js";
+import { normalizeEmail } from "../src/config/allowedEmails.js";
 import { gameSets } from "../src/data/games.js";
 import { matchResults } from "../src/data/results.js";
+import { allowlistStorageErrorMessage, isAllowedParticipantEmail } from "./participantStore.js";
 import { predictionStorageErrorMessage, readPredictions, savePredictions } from "./predictionStore.js";
 
 type PredictionInput = {
@@ -37,8 +38,12 @@ export default async function handler(request: VercelRequest, response: VercelRe
         ? bodyRecord.email
         : "";
 
-  if (!email || !isAllowedEmail(email)) {
-    return sendError(response, 403, "This email is not allowed to use the pool.");
+  try {
+    if (!email || !(await isAllowedParticipantEmail(email))) {
+      return sendError(response, 403, "This email is not allowed to use the pool.");
+    }
+  } catch (error) {
+    return sendError(response, 503, allowlistStorageErrorMessage(error));
   }
 
   if (request.method === "GET") {

@@ -10,6 +10,7 @@ import type { Game, GameResult, GameSet, LeaderboardEntry, PredictionsByGame } f
 const emailStorageKey = "wc26-email";
 const localPredictionsStoragePrefix = "wc26-local-predictions";
 const app = document.querySelector<HTMLDivElement>("#app");
+const validateEmailsLocally = import.meta.env.DEV;
 
 type ActiveView = "predictions" | "leaderboard";
 
@@ -198,6 +199,17 @@ function runningStandaloneViteDev() {
   return import.meta.env.DEV;
 }
 
+function canUseEmailLocally(email: string) {
+  return !validateEmailsLocally || isAllowedEmail(email);
+}
+
+function rejectStoredEmail(message: string) {
+  localStorage.removeItem(emailStorageKey);
+  state.email = null;
+  state.predictions = {};
+  state.message = message;
+}
+
 function localPredictionsStorageKey(email: string) {
   return `${localPredictionsStoragePrefix}:${normalizeEmail(email)}`;
 }
@@ -245,13 +257,18 @@ async function fetchPredictions(email: string) {
     const payload = await readJsonResponse(response);
 
     if (!response.ok) {
+      if (response.status === 403) {
+        rejectStoredEmail(payload.error ?? "This email is not on the allowed list.");
+      }
       throw new Error(payload.error ?? "Could not load predictions.");
     }
 
     state.predictions = payload.predictions ?? {};
     state.message = "";
   } catch (error) {
-    state.message = error instanceof Error ? error.message : "Could not load predictions.";
+    if (state.email) {
+      state.message = error instanceof Error ? error.message : "Could not load predictions.";
+    }
   } finally {
     state.loading = false;
     render();
@@ -373,7 +390,7 @@ async function savePrediction(game: Game) {
 function login(email: string) {
   const normalized = normalizeEmail(email);
 
-  if (!isAllowedEmail(normalized)) {
+  if (!canUseEmailLocally(normalized)) {
     state.message = "This email is not on the allowed list.";
     render();
     return;
@@ -709,7 +726,7 @@ function render() {
     return;
   }
 
-  if (!state.email || !isAllowedEmail(state.email)) {
+  if (!state.email || !canUseEmailLocally(state.email)) {
     renderLogin();
     return;
   }
@@ -719,6 +736,6 @@ function render() {
 
 render();
 
-if (state.email && isAllowedEmail(state.email)) {
+if (state.email && canUseEmailLocally(state.email)) {
   fetchPredictions(state.email);
 }
