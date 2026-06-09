@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { normalizeEmail } from "../src/config/allowedEmails.js";
 import { gameSets } from "../src/data/games.js";
 import { matchResults } from "../src/data/results.js";
-import { allowlistStorageErrorMessage, isAllowedParticipantEmail } from "./participantStore.js";
+import { allowlistStorageErrorMessage, isAuthorizedParticipant } from "./participantStore.js";
 import { predictionStorageErrorMessage, readPredictions, savePredictions } from "./predictionStore.js";
 
 type PredictionInput = {
@@ -16,6 +16,11 @@ const finalGameIds = new Set(matchResults.map((result) => result.gameId));
 
 function sendError(response: VercelResponse, status: number, message: string) {
   response.status(status).json({ error: message });
+}
+
+function accessTokenFromRequest(request: VercelRequest) {
+  const header = request.headers["x-wc26-access-token"];
+  return typeof header === "string" ? header : "";
 }
 
 function validScore(value: unknown): value is number {
@@ -39,7 +44,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
         : "";
 
   try {
-    if (!email || !(await isAllowedParticipantEmail(email))) {
+    if (!email || !(await isAuthorizedParticipant(email, accessTokenFromRequest(request)))) {
       return sendError(response, 403, "This email is not allowed to use the pool.");
     }
   } catch (error) {

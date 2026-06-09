@@ -1,9 +1,14 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { get } from "@vercel/blob";
 import { allowedEmails, normalizeEmail } from "../src/config/allowedEmails.js";
 import { participants as localParticipants } from "../src/config/participants.js";
 import type { Participant } from "../src/types.js";
 
-type BlobAllowlist = string[] | { emails?: readonly string[]; participants?: readonly Participant[] };
+type ParticipantWithToken = Participant & {
+  tokenHash?: string;
+};
+
+type BlobAllowlist = string[] | { emails?: readonly string[]; participants?: readonly ParticipantWithToken[] };
 
 const allowlistStorageUnavailableMessage =
   "Email allowlist storage is not configured. Connect a Vercel Blob store for this deployment.";
@@ -43,6 +48,13 @@ function normalizeParticipant(participant: Participant): Participant {
   };
 }
 
+function normalizeParticipantWithToken(participant: ParticipantWithToken): ParticipantWithToken {
+  return {
+    ...normalizeParticipant(participant),
+    tokenHash: participant.tokenHash,
+  };
+}
+
 function participantsFromBlob(payload: BlobAllowlist): Participant[] {
   if (Array.isArray(payload)) {
     return payload.map(participantFromEmail);
@@ -51,7 +63,7 @@ function participantsFromBlob(payload: BlobAllowlist): Participant[] {
   const { emails, participants } = payload;
 
   if (Array.isArray(participants)) {
-    return participants.map(normalizeParticipant);
+    return participants.map(normalizeParticipantWithToken);
   }
 
   if (Array.isArray(emails)) {
@@ -59,6 +71,16 @@ function participantsFromBlob(payload: BlobAllowlist): Participant[] {
   }
 
   throw new AllowlistStorageError("Email allowlist storage is invalid. Expected emails or participants JSON.");
+}
+
+function hashAccessToken(accessToken: string) {
+  return createHash("sha256").update(accessToken).digest("hex");
+}
+
+function hashesMatch(candidate: string, expected: string) {
+  const candidateBuffer = Buffer.from(candidate, "hex");
+  const expectedBuffer = Buffer.from(expected, "hex");
+  return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer);
 }
 
 function allowlistStorageError(error: unknown) {
@@ -101,6 +123,25 @@ export async function isAllowedParticipantEmail(email: string) {
 
   const participants = await readParticipants();
   return participants.some((participant) => participant.email === normalized);
+}
+
+export async function isAuthorizedParticipant(email: string, accessToken: string) {
+  const normalized = normalizeEmail(email);
+  if (!shouldReadAllowlistFromBlob()) {
+    return allowedEmails.includes(normalized as (typeof allowedEmails)[number]);
+  }
+
+  if (!accessToken) {
+    return false;
+  }
+
+  const participants = (await readParticipants()) as readonly ParticipantWithToken[];
+  const participant = participants.find((item) => item.email === normalized);
+  if (!participant?.tokenHash) {
+    return false;
+  }
+
+  return hashesMatch(hashAccessToken(accessToken), participant.tokenHash);
 }
 
 export function allowlistStorageErrorMessage(error: unknown) {

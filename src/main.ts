@@ -8,14 +8,17 @@ import { buildLeaderboard } from "./scoring.js";
 import type { Game, GameResult, GameSet, LeaderboardEntry, PredictionsByGame } from "./types.js";
 
 const emailStorageKey = "wc26-email";
+const accessTokenStorageKey = "wc26-access-token";
 const localPredictionsStoragePrefix = "wc26-local-predictions";
 const app = document.querySelector<HTMLDivElement>("#app");
 const validateEmailsLocally = import.meta.env.DEV;
+const requireAccessToken = !import.meta.env.DEV;
 
 type ActiveView = "predictions" | "leaderboard";
 
 type AppState = {
   email: string | null;
+  accessToken: string | null;
   predictions: PredictionsByGame;
   leaderboard: LeaderboardEntry[];
   leaderboardLoaded: boolean;
@@ -29,6 +32,7 @@ type AppState = {
 
 const state: AppState = {
   email: localStorage.getItem(emailStorageKey),
+  accessToken: localStorage.getItem(accessTokenStorageKey),
   predictions: {},
   leaderboard: [],
   leaderboardLoaded: false,
@@ -203,9 +207,19 @@ function canUseEmailLocally(email: string) {
   return !validateEmailsLocally || isAllowedEmail(email);
 }
 
+function canUseStoredCredentials() {
+  return Boolean(state.email && (!requireAccessToken || state.accessToken));
+}
+
+function authHeaders(): Record<string, string> {
+  return state.accessToken ? { "X-WC26-Access-Token": state.accessToken } : {};
+}
+
 function rejectStoredEmail(message: string) {
   localStorage.removeItem(emailStorageKey);
+  localStorage.removeItem(accessTokenStorageKey);
   state.email = null;
+  state.accessToken = null;
   state.predictions = {};
   state.message = message;
 }
@@ -253,7 +267,9 @@ async function fetchPredictions(email: string) {
   render();
 
   try {
-    const response = await fetch(`/api/predictions?email=${encodeURIComponent(email)}`);
+    const response = await fetch(`/api/predictions?email=${encodeURIComponent(email)}`, {
+      headers: authHeaders(),
+    });
     const payload = await readJsonResponse(response);
 
     if (!response.ok) {
@@ -292,7 +308,9 @@ async function fetchLeaderboard() {
   render();
 
   try {
-    const response = await fetch(`/api/leaderboard?email=${encodeURIComponent(state.email)}`);
+    const response = await fetch(`/api/leaderboard?email=${encodeURIComponent(state.email)}`, {
+      headers: authHeaders(),
+    });
     const payload = await readJsonResponse(response);
 
     if (!response.ok) {
@@ -361,7 +379,7 @@ async function savePrediction(game: Game) {
   try {
     const response = await fetch("/api/predictions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({
         email: state.email,
         prediction: {
@@ -387,8 +405,9 @@ async function savePrediction(game: Game) {
   }
 }
 
-function login(email: string) {
+function login(email: string, accessToken: string) {
   const normalized = normalizeEmail(email);
+  const token = accessToken.trim();
 
   if (!canUseEmailLocally(normalized)) {
     state.message = "This email is not on the allowed list.";
@@ -396,8 +415,20 @@ function login(email: string) {
     return;
   }
 
+  if (requireAccessToken && !token) {
+    state.message = "Enter your access token.";
+    render();
+    return;
+  }
+
   localStorage.setItem(emailStorageKey, normalized);
+  if (token) {
+    localStorage.setItem(accessTokenStorageKey, token);
+  } else {
+    localStorage.removeItem(accessTokenStorageKey);
+  }
   state.email = normalized;
+  state.accessToken = token;
   state.activeView = "predictions";
   state.leaderboardLoaded = false;
   fetchPredictions(normalized);
@@ -405,7 +436,9 @@ function login(email: string) {
 
 function logout() {
   localStorage.removeItem(emailStorageKey);
+  localStorage.removeItem(accessTokenStorageKey);
   state.email = null;
+  state.accessToken = null;
   state.predictions = {};
   state.leaderboard = [];
   state.leaderboardLoaded = false;
@@ -416,6 +449,15 @@ function logout() {
 }
 
 function renderLogin() {
+  const accessTokenField = requireAccessToken
+    ? `
+          <label for="access-token">Access token</label>
+          <div class="login-row">
+            <input id="access-token" name="access-token" type="password" autocomplete="current-password" required />
+          </div>
+        `
+    : "";
+
   app!.innerHTML = `
     <main class="login-shell">
       <section class="login-panel">
@@ -429,6 +471,7 @@ function renderLogin() {
             <input id="email" name="email" type="email" autocomplete="email" required />
             <button type="submit">Log In</button>
           </div>
+          ${accessTokenField}
         </form>
         ${state.message ? `<p class="status error">${state.message}</p>` : ""}
       </section>
@@ -438,7 +481,7 @@ function renderLogin() {
   document.querySelector<HTMLFormElement>("#login-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget as HTMLFormElement);
-    login(String(form.get("email") ?? ""));
+    login(String(form.get("email") ?? ""), String(form.get("access-token") ?? ""));
   });
 }
 
@@ -726,7 +769,7 @@ function render() {
     return;
   }
 
-  if (!state.email || !canUseEmailLocally(state.email)) {
+  if (!canUseStoredCredentials() || !canUseEmailLocally(state.email ?? "")) {
     renderLogin();
     return;
   }
@@ -736,6 +779,6 @@ function render() {
 
 render();
 
-if (state.email && canUseEmailLocally(state.email)) {
-  fetchPredictions(state.email);
+if (canUseStoredCredentials() && canUseEmailLocally(state.email ?? "")) {
+  fetchPredictions(state.email!);
 }

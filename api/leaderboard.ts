@@ -3,11 +3,16 @@ import { normalizeEmail } from "../src/config/allowedEmails.js";
 import { matchResults } from "../src/data/results.js";
 import { buildLeaderboard } from "../src/scoring.js";
 import type { Participant } from "../src/types.js";
-import { allowlistStorageErrorMessage, readParticipants } from "./participantStore.js";
+import { allowlistStorageErrorMessage, isAuthorizedParticipant, readParticipants } from "./participantStore.js";
 import { predictionStorageErrorMessage, readPredictions } from "./predictionStore.js";
 
 function sendError(response: VercelResponse, status: number, message: string) {
   response.status(status).json({ error: message });
+}
+
+function accessTokenFromRequest(request: VercelRequest) {
+  const header = request.headers["x-wc26-access-token"];
+  return typeof header === "string" ? header : "";
 }
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
@@ -21,7 +26,8 @@ export default async function handler(request: VercelRequest, response: VercelRe
   try {
     participants = await readParticipants();
     const normalizedEmail = normalizeEmail(email);
-    if (!email || !participants.some((participant) => participant.email === normalizedEmail)) {
+    const participantExists = participants.some((participant) => participant.email === normalizedEmail);
+    if (!email || !participantExists || !(await isAuthorizedParticipant(email, accessTokenFromRequest(request)))) {
       return sendError(response, 403, "This email is not allowed to use the pool.");
     }
   } catch (error) {
