@@ -77,10 +77,14 @@ function hashAccessToken(accessToken: string) {
   return createHash("sha256").update(accessToken).digest("hex");
 }
 
+function hexToBytes(value: string) {
+  return Uint8Array.from(value.match(/.{1,2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
+}
+
 function hashesMatch(candidate: string, expected: string) {
-  const candidateBuffer = Buffer.from(candidate, "hex");
-  const expectedBuffer = Buffer.from(expected, "hex");
-  return candidateBuffer.length === expectedBuffer.length && timingSafeEqual(candidateBuffer, expectedBuffer);
+  const candidateBytes = hexToBytes(candidate);
+  const expectedBytes = hexToBytes(expected);
+  return candidateBytes.length === expectedBytes.length && timingSafeEqual(candidateBytes, expectedBytes);
 }
 
 function allowlistStorageError(error: unknown) {
