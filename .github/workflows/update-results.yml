@@ -18,4 +18,4 @@ jobs:
           curl --fail --show-error --silent \
             --request POST \
             --header "Authorization: Bearer ${WC26_CRON_SECRET}" \
-            "${WC26_APP_URL}/api/update-results?probe=true&limit=3"
+            "${WC26_APP_URL}/api/update-results"
