@@ -2,7 +2,11 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { espnEventIds } from "../src/data/espnEvents.js";
 import { gameSets } from "../src/data/games.js";
 import type { Game, GameResult } from "../src/types.js";
-import { readResults, resultStorageErrorMessage, saveResults } from "./resultStore.js";
+import {
+  readResults,
+  resultStorageErrorMessage,
+  saveResults,
+} from "./resultStore.js";
 
 type EspnCompetitor = {
   id: string;
@@ -62,8 +66,11 @@ function sendError(response: VercelResponse, status: number, message: string) {
 function accessTokenFromRequest(request: VercelRequest) {
   const authorization = request.headers.authorization;
   const bearerToken =
-    typeof authorization === "string" && authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  const queryToken = typeof request.query.secret === "string" ? request.query.secret : "";
+    typeof authorization === "string" && authorization.startsWith("Bearer ")
+      ? authorization.slice(7)
+      : "";
+  const queryToken =
+    typeof request.query.secret === "string" ? request.query.secret : "";
   return bearerToken || queryToken;
 }
 
@@ -84,7 +91,9 @@ function espnDateKey(date: Date, timeZone: string) {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const values = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
 
   return `${values.year}${values.month}${values.day}`;
 }
@@ -105,8 +114,13 @@ function sameTeam(left: string, right: string) {
 }
 
 function dueGames(now: Date, existingResults: readonly GameResult[]) {
-  const existingGameIds = new Set(existingResults.map((result) => result.gameId));
-  const pollDelayMs = Number(process.env.RESULT_POLL_DELAY_MINUTES ?? defaultPollDelayMinutes) * 60 * 1000;
+  const existingGameIds = new Set(
+    existingResults.map((result) => result.gameId),
+  );
+  const pollDelayMs =
+    Number(process.env.RESULT_POLL_DELAY_MINUTES ?? defaultPollDelayMinutes) *
+    60 *
+    1000;
   const catchupWindowMs = catchupWindowHours * 60 * 60 * 1000;
 
   return gameSets
@@ -126,8 +140,14 @@ function dueGames(now: Date, existingResults: readonly GameResult[]) {
     });
 }
 
-function probeGames(now: Date, existingResults: readonly GameResult[], limit: number) {
-  const existingGameIds = new Set(existingResults.map((result) => result.gameId));
+function probeGames(
+  now: Date,
+  existingResults: readonly GameResult[],
+  limit: number,
+) {
+  const existingGameIds = new Set(
+    existingResults.map((result) => result.gameId),
+  );
 
   return gameSets
     .flatMap((set) => set.games)
@@ -137,16 +157,26 @@ function probeGames(now: Date, existingResults: readonly GameResult[], limit: nu
       }
 
       const kickoff = parseGameDate(game.dateTime);
-      return !Number.isNaN(kickoff.getTime()) && kickoff.getTime() >= now.getTime();
+      return (
+        !Number.isNaN(kickoff.getTime()) && kickoff.getTime() >= now.getTime()
+      );
     })
-    .sort((left, right) => parseGameDate(left.dateTime).getTime() - parseGameDate(right.dateTime).getTime())
+    .sort(
+      (left, right) =>
+        parseGameDate(left.dateTime).getTime() -
+        parseGameDate(right.dateTime).getTime(),
+    )
     .slice(0, limit);
 }
 
 function competitorsForEvent(event: EspnEvent) {
   const competition = event.competitions[0];
-  const home = competition?.competitors.find((competitor) => competitor.homeAway === "home");
-  const away = competition?.competitors.find((competitor) => competitor.homeAway === "away");
+  const home = competition?.competitors.find(
+    (competitor) => competitor.homeAway === "home",
+  );
+  const away = competition?.competitors.find(
+    (competitor) => competitor.homeAway === "away",
+  );
 
   return { competition, home, away };
 }
@@ -159,7 +189,12 @@ function findEventForGame(game: Game, events: readonly EspnEvent[]) {
 
   return events.find((event) => {
     const { home, away } = competitorsForEvent(event);
-    return Boolean(home && away && sameTeam(game.homeTeam, home.team.displayName) && sameTeam(game.awayTeam, away.team.displayName));
+    return Boolean(
+      home &&
+      away &&
+      sameTeam(game.homeTeam, home.team.displayName) &&
+      sameTeam(game.awayTeam, away.team.displayName),
+    );
   });
 }
 
@@ -188,7 +223,11 @@ function resultFromEvent(game: Game, event: EspnEvent): GameResult | null {
   const homeScore = Number(home?.score);
   const awayScore = Number(away?.score);
 
-  if (!competition?.status.type.completed || !Number.isInteger(homeScore) || !Number.isInteger(awayScore)) {
+  if (
+    !competition?.status.type.completed ||
+    !Number.isInteger(homeScore) ||
+    !Number.isInteger(awayScore)
+  ) {
     return null;
   }
 
@@ -202,17 +241,25 @@ function resultFromEvent(game: Game, event: EspnEvent): GameResult | null {
 async function fetchEvents(games: readonly Game[]) {
   const timezone = process.env.ESPN_TIMEZONE ?? "America/New_York";
   const host = process.env.ESPN_SCOREBOARD_HOST ?? "site.api.espn.com";
-  const dates = Array.from(new Set(games.map((game) => espnDateKey(parseGameDate(game.dateTime), timezone))));
+  const dates = Array.from(
+    new Set(
+      games.map((game) => espnDateKey(parseGameDate(game.dateTime), timezone)),
+    ),
+  );
   const responses = await Promise.all(
     dates.map(async (date) => {
-      const url = new URL(`https://${host}/apis/site/v2/sports/soccer/fifa.world/scoreboard`);
+      const url = new URL(
+        `https://${host}/apis/site/v2/sports/soccer/fifa.world/scoreboard`,
+      );
       url.searchParams.set("dates", date);
 
       const espnResponse = await fetch(url);
       const payload = (await espnResponse.json()) as EspnScoreboardResponse;
 
       if (!espnResponse.ok) {
-        throw new Error(`ESPN scoreboard request failed with ${espnResponse.status}.`);
+        throw new Error(
+          `ESPN scoreboard request failed with ${espnResponse.status}.`,
+        );
       }
 
       if (!Array.isArray(payload.events)) {
@@ -226,7 +273,10 @@ async function fetchEvents(games: readonly Game[]) {
   return responses.flat();
 }
 
-export default async function handler(request: VercelRequest, response: VercelResponse) {
+export default async function handler(
+  request: VercelRequest,
+  response: VercelResponse,
+) {
   if (request.method !== "GET" && request.method !== "POST") {
     response.setHeader("Allow", "GET, POST");
     return sendError(response, 405, "Method not allowed.");
@@ -242,11 +292,26 @@ export default async function handler(request: VercelRequest, response: VercelRe
     const probe = request.query.probe === "true";
     const probeLimit =
       typeof request.query.limit === "string"
-        ? Math.max(1, Math.min(20, Number.parseInt(request.query.limit, 10) || defaultProbeLimit))
+        ? Math.max(
+            1,
+            Math.min(
+              24,
+              Number.parseInt(request.query.limit, 10) || defaultProbeLimit,
+            ),
+          )
         : defaultProbeLimit;
-    const games = probe ? probeGames(now, existingResults, probeLimit) : dueGames(now, existingResults);
+    const games = probe
+      ? probeGames(now, existingResults, probeLimit)
+      : dueGames(now, existingResults);
     if (games.length === 0) {
-      return response.status(200).json({ probe, checked: 0, saved: 0, resultsCount: existingResults.length });
+      return response
+        .status(200)
+        .json({
+          probe,
+          checked: 0,
+          saved: 0,
+          resultsCount: existingResults.length,
+        });
     }
 
     const events = await fetchEvents(games);
@@ -269,7 +334,10 @@ export default async function handler(request: VercelRequest, response: VercelRe
               kickoff: game.dateTime,
             },
             matched: Boolean(event),
-            matchMethod: event && espnEventIds[game.id] !== undefined ? "eventId" : "teamName",
+            matchMethod:
+              event && espnEventIds[game.id] !== undefined
+                ? "eventId"
+                : "teamName",
             provider: event ? summarizeEvent(event) : null,
           };
         }),
@@ -292,11 +360,14 @@ export default async function handler(request: VercelRequest, response: VercelRe
       resultsCount: existingResults.length + newResults.length,
       savedGameIds: newResults.map((result) => result.gameId),
       unmatchedGameIds: games
-        .filter((game) => !newResults.some((result) => result.gameId === game.id))
+        .filter(
+          (game) => !newResults.some((result) => result.gameId === game.id),
+        )
         .map((game) => game.id),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : resultStorageErrorMessage(error);
+    const message =
+      error instanceof Error ? error.message : resultStorageErrorMessage(error);
     sendError(response, 503, message);
   }
 }
