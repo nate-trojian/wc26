@@ -1,0 +1,20 @@
+name: Update World Cup results
+
+on:
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+
+jobs:
+  update-results:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call result updater
+        env:
+          WC26_APP_URL: ${{ secrets.WC26_APP_URL }}
+          WC26_CRON_SECRET: ${{ secrets.WC26_CRON_SECRET }}
+        run: |
+          curl --fail --show-error --silent \
+            --request POST \
+            --header "Authorization: Bearer ${WC26_CRON_SECRET}" \
+            "${WC26_APP_URL}/api/update-results?probe=true&limit=3"

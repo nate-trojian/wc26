@@ -2,7 +2,7 @@ import "./styles.css";
 import { isAllowedEmail, normalizeEmail } from "./config/allowedEmails.js";
 import { participants } from "./config/participants.js";
 import { gameSets } from "./data/games.js";
-import { matchResults } from "./data/results.js";
+import { matchResults as seedMatchResults } from "./data/results.js";
 import { teamEspnLinks } from "./data/teamLinks.js";
 import { buildLeaderboard } from "./scoring.js";
 import type { Game, GameResult, GameSet, LeaderboardEntry, PredictionsByGame } from "./types.js";
@@ -20,6 +20,7 @@ type AppState = {
   email: string | null;
   accessToken: string | null;
   predictions: PredictionsByGame;
+  matchResults: readonly GameResult[];
   leaderboard: LeaderboardEntry[];
   leaderboardLoaded: boolean;
   resultsCount: number;
@@ -34,9 +35,10 @@ const state: AppState = {
   email: localStorage.getItem(emailStorageKey),
   accessToken: localStorage.getItem(accessTokenStorageKey),
   predictions: {},
+  matchResults: seedMatchResults,
   leaderboard: [],
   leaderboardLoaded: false,
-  resultsCount: matchResults.length,
+  resultsCount: seedMatchResults.length,
   activeSetId: gameSets[0]?.id ?? "first",
   activeView: "predictions",
   loading: false,
@@ -95,7 +97,7 @@ function gameSetForGame(game: Game) {
 }
 
 function resultForGame(gameId: string): GameResult | undefined {
-  return matchResults.find((result) => result.gameId === gameId);
+  return state.matchResults.find((result) => result.gameId === gameId);
 }
 
 function scoreOutcome(homeScore: number, awayScore: number) {
@@ -258,6 +260,8 @@ async function readJsonResponse(response: Response) {
 async function fetchPredictions(email: string) {
   if (runningStandaloneViteDev()) {
     state.predictions = loadLocalPredictions(email);
+    state.matchResults = seedMatchResults;
+    state.resultsCount = seedMatchResults.length;
     state.message = "";
     render();
     return;
@@ -280,6 +284,8 @@ async function fetchPredictions(email: string) {
     }
 
     state.predictions = payload.predictions ?? {};
+    state.matchResults = payload.results ?? [];
+    state.resultsCount = state.matchResults.length;
     state.message = "";
   } catch (error) {
     if (state.email) {
@@ -297,8 +303,8 @@ async function fetchLeaderboard() {
   }
 
   if (runningStandaloneViteDev()) {
-    state.leaderboard = buildLeaderboard(participants, loadAllLocalPredictions(), matchResults);
-    state.resultsCount = matchResults.length;
+    state.leaderboard = buildLeaderboard(participants, loadAllLocalPredictions(), state.matchResults);
+    state.resultsCount = state.matchResults.length;
     state.leaderboardLoaded = true;
     render();
     return;
@@ -442,7 +448,8 @@ function logout() {
   state.predictions = {};
   state.leaderboard = [];
   state.leaderboardLoaded = false;
-  state.resultsCount = matchResults.length;
+  state.matchResults = seedMatchResults;
+  state.resultsCount = seedMatchResults.length;
   state.activeView = "predictions";
   state.message = "";
   render();

@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { normalizeEmail } from "../src/config/allowedEmails.js";
-import { matchResults } from "../src/data/results.js";
 import { buildLeaderboard } from "../src/scoring.js";
 import type { Participant } from "../src/types.js";
 import { allowlistStorageErrorMessage, isAuthorizedParticipant, readParticipants } from "./participantStore.js";
 import { predictionStorageErrorMessage, readPredictions } from "./predictionStore.js";
+import { readResults, resultStorageErrorMessage } from "./resultStore.js";
 
 function sendError(response: VercelResponse, status: number, message: string) {
   response.status(status).json({ error: message });
@@ -35,6 +35,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
   }
 
   try {
+    const matchResults = await readResults();
     const predictionsByEmail = Object.fromEntries(
       await Promise.all(
         participants.map(async (participant) => [participant.email, await readPredictions(participant.email)] as const),
@@ -46,6 +47,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
       resultsCount: matchResults.length,
     });
   } catch (error) {
-    sendError(response, 503, predictionStorageErrorMessage(error));
+    const message = error instanceof Error ? error.message : resultStorageErrorMessage(error) || predictionStorageErrorMessage(error);
+    sendError(response, 503, message);
   }
 }

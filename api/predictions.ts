@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { normalizeEmail } from "../src/config/allowedEmails.js";
 import { gameSets } from "../src/data/games.js";
-import { matchResults } from "../src/data/results.js";
 import { allowlistStorageErrorMessage, isAuthorizedParticipant } from "./participantStore.js";
 import { predictionStorageErrorMessage, readPredictions, savePredictions } from "./predictionStore.js";
+import { readResults, resultStorageErrorMessage } from "./resultStore.js";
 
 type PredictionInput = {
   gameId: string;
@@ -12,7 +12,6 @@ type PredictionInput = {
 };
 
 const gameIds = new Set(gameSets.flatMap((set) => set.games.map((game) => game.id)));
-const finalGameIds = new Set(matchResults.map((result) => result.gameId));
 
 function sendError(response: VercelResponse, status: number, message: string) {
   response.status(status).json({ error: message });
@@ -53,10 +52,12 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
   if (request.method === "GET") {
     try {
+      const results = await readResults();
       const predictions = await readPredictions(email);
-      response.status(200).json({ email: normalizeEmail(email), predictions });
+      response.status(200).json({ email: normalizeEmail(email), predictions, results });
     } catch (error) {
-      sendError(response, 503, predictionStorageErrorMessage(error));
+      const message = error instanceof Error ? error.message : resultStorageErrorMessage(error) || predictionStorageErrorMessage(error);
+      sendError(response, 503, message);
     }
     return;
   }
@@ -71,11 +72,12 @@ export default async function handler(request: VercelRequest, response: VercelRe
       return sendError(response, 400, "Scores must be whole numbers between 0 and 99.");
     }
 
-    if (finalGameIds.has(input.gameId)) {
-      return sendError(response, 403, "This match is final. Predictions are locked.");
-    }
-
     try {
+      const finalGameIds = new Set((await readResults()).map((result) => result.gameId));
+      if (finalGameIds.has(input.gameId)) {
+        return sendError(response, 403, "This match is final. Predictions are locked.");
+      }
+
       const predictions = await readPredictions(email);
       predictions[input.gameId] = {
         homeScore: input.homeScore,
