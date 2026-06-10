@@ -1,35 +1,45 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { espnEventIds } from "../src/data/espnEvents.js";
 import { gameSets } from "../src/data/games.js";
 import type { Game, GameResult } from "../src/types.js";
 import { readResults, resultStorageErrorMessage, saveResults } from "./resultStore.js";
 
-type ApiFootballFixture = {
-  fixture: {
-    date: string;
-    status: {
-      short: string;
-    };
-  };
-  teams: {
-    home: {
-      name: string;
-    };
-    away: {
-      name: string;
-    };
-  };
-  goals: {
-    home: number | null;
-    away: number | null;
+type EspnCompetitor = {
+  id: string;
+  homeAway: "home" | "away";
+  score: string;
+  team: {
+    id: string;
+    abbreviation?: string;
+    displayName: string;
+    shortDisplayName?: string;
   };
 };
 
-type ApiFootballResponse = {
-  response?: ApiFootballFixture[];
-  errors?: unknown;
+type EspnCompetition = {
+  id: string;
+  date: string;
+  status: {
+    type: {
+      name: string;
+      state: string;
+      completed: boolean;
+    };
+  };
+  competitors: EspnCompetitor[];
 };
 
-const finalStatuses = new Set(["FT", "AET", "PEN"]);
+type EspnEvent = {
+  id: string;
+  date: string;
+  name: string;
+  competitions: EspnCompetition[];
+};
+
+type EspnScoreboardResponse = {
+  events?: EspnEvent[];
+};
+
 const defaultPollDelayMinutes = 150;
 const catchupWindowHours = 48;
 const defaultProbeLimit = 3;
@@ -67,7 +77,7 @@ function parseGameDate(value: string) {
   return new Date(normalized);
 }
 
-function dateKey(date: Date, timeZone: string) {
+function espnDateKey(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
@@ -76,7 +86,7 @@ function dateKey(date: Date, timeZone: string) {
   }).formatToParts(date);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
 
-  return `${values.year}-${values.month}-${values.day}`;
+  return `${values.year}${values.month}${values.day}`;
 }
 
 function normalizeTeamName(value: string) {
@@ -133,62 +143,87 @@ function probeGames(now: Date, existingResults: readonly GameResult[], limit: nu
     .slice(0, limit);
 }
 
-function findFixtureForGame(game: Game, fixtures: readonly ApiFootballFixture[]) {
-  return fixtures.find(
-    (fixture) => sameTeam(game.homeTeam, fixture.teams.home.name) && sameTeam(game.awayTeam, fixture.teams.away.name),
-  );
+function competitorsForEvent(event: EspnEvent) {
+  const competition = event.competitions[0];
+  const home = competition?.competitors.find((competitor) => competitor.homeAway === "home");
+  const away = competition?.competitors.find((competitor) => competitor.homeAway === "away");
+
+  return { competition, home, away };
 }
 
-function resultFromFixture(game: Game, fixture: ApiFootballFixture): GameResult | null {
-  const { home, away } = fixture.goals;
-  if (!finalStatuses.has(fixture.fixture.status.short) || home === null || away === null) {
+function findEventForGame(game: Game, events: readonly EspnEvent[]) {
+  const eventId = espnEventIds[game.id];
+  if (eventId !== undefined) {
+    return events.find((event) => event.id === eventId);
+  }
+
+  return events.find((event) => {
+    const { home, away } = competitorsForEvent(event);
+    return Boolean(home && away && sameTeam(game.homeTeam, home.team.displayName) && sameTeam(game.awayTeam, away.team.displayName));
+  });
+}
+
+function summarizeEvent(event: EspnEvent) {
+  const { competition, home, away } = competitorsForEvent(event);
+
+  return {
+    eventId: event.id,
+    name: event.name,
+    homeTeamId: home?.team.id ?? null,
+    homeTeam: home?.team.displayName ?? null,
+    homeAbbreviation: home?.team.abbreviation ?? null,
+    awayTeamId: away?.team.id ?? null,
+    awayTeam: away?.team.displayName ?? null,
+    awayAbbreviation: away?.team.abbreviation ?? null,
+    kickoff: competition?.date ?? event.date,
+    status: competition?.status.type.name ?? null,
+    completed: competition?.status.type.completed ?? false,
+    homeScore: home ? Number(home.score) : null,
+    awayScore: away ? Number(away.score) : null,
+  };
+}
+
+function resultFromEvent(game: Game, event: EspnEvent): GameResult | null {
+  const { competition, home, away } = competitorsForEvent(event);
+  const homeScore = Number(home?.score);
+  const awayScore = Number(away?.score);
+
+  if (!competition?.status.type.completed || !Number.isInteger(homeScore) || !Number.isInteger(awayScore)) {
     return null;
   }
 
   return {
     gameId: game.id,
-    homeScore: home,
-    awayScore: away,
+    homeScore,
+    awayScore,
   };
 }
 
-async function fetchFixtures(games: readonly Game[]) {
-  const apiKey = process.env.API_FOOTBALL_KEY;
-  if (!apiKey) {
-    throw new Error("API_FOOTBALL_KEY is not configured.");
-  }
+async function fetchEvents(games: readonly Game[]) {
+  const timezone = process.env.ESPN_TIMEZONE ?? "America/New_York";
+  const host = process.env.ESPN_SCOREBOARD_HOST ?? "site.api.espn.com";
+  const dates = Array.from(new Set(games.map((game) => espnDateKey(parseGameDate(game.dateTime), timezone))));
+  const responses = await Promise.all(
+    dates.map(async (date) => {
+      const url = new URL(`https://${host}/apis/site/v2/sports/soccer/fifa.world/scoreboard`);
+      url.searchParams.set("dates", date);
 
-  const leagueId = process.env.API_FOOTBALL_LEAGUE_ID ?? "1";
-  const season = process.env.API_FOOTBALL_SEASON ?? "2026";
-  const timezone = process.env.API_FOOTBALL_TIMEZONE ?? "America/New_York";
-  const host = process.env.API_FOOTBALL_HOST ?? "v3.football.api-sports.io";
-  const kickoffDates = games.map((game) => parseGameDate(game.dateTime)).sort((left, right) => left.getTime() - right.getTime());
-  const from = dateKey(kickoffDates[0], timezone);
-  const to = dateKey(kickoffDates[kickoffDates.length - 1], timezone);
-  const url = new URL(`https://${host}/fixtures`);
+      const espnResponse = await fetch(url);
+      const payload = (await espnResponse.json()) as EspnScoreboardResponse;
 
-  url.searchParams.set("league", leagueId);
-  url.searchParams.set("season", season);
-  url.searchParams.set("from", from);
-  url.searchParams.set("to", to);
-  url.searchParams.set("timezone", timezone);
+      if (!espnResponse.ok) {
+        throw new Error(`ESPN scoreboard request failed with ${espnResponse.status}.`);
+      }
 
-  const apiResponse = await fetch(url, {
-    headers: {
-      "x-apisports-key": apiKey,
-    },
-  });
-  const payload = (await apiResponse.json()) as ApiFootballResponse;
+      if (!Array.isArray(payload.events)) {
+        throw new Error("ESPN scoreboard response did not include events.");
+      }
 
-  if (!apiResponse.ok) {
-    throw new Error(`API-Football request failed with ${apiResponse.status}.`);
-  }
+      return payload.events;
+    }),
+  );
 
-  if (!Array.isArray(payload.response)) {
-    throw new Error("API-Football response did not include fixtures.");
-  }
-
-  return payload.response;
+  return responses.flat();
 }
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
@@ -214,15 +249,16 @@ export default async function handler(request: VercelRequest, response: VercelRe
       return response.status(200).json({ probe, checked: 0, saved: 0, resultsCount: existingResults.length });
     }
 
-    const fixtures = await fetchFixtures(games);
+    const events = await fetchEvents(games);
     if (probe) {
       return response.status(200).json({
         probe: true,
         checked: games.length,
         saved: 0,
         resultsCount: existingResults.length,
+        candidateEvents: events.map(summarizeEvent),
         fixtureChecks: games.map((game) => {
-          const fixture = findFixtureForGame(game, fixtures);
+          const event = findEventForGame(game, events);
 
           return {
             gameId: game.id,
@@ -232,26 +268,17 @@ export default async function handler(request: VercelRequest, response: VercelRe
               awayTeam: game.awayTeam,
               kickoff: game.dateTime,
             },
-            matched: Boolean(fixture),
-            provider: fixture
-              ? {
-                  homeTeam: fixture.teams.home.name,
-                  awayTeam: fixture.teams.away.name,
-                  kickoff: fixture.fixture.date,
-                  status: fixture.fixture.status.short,
-                  homeScore: fixture.goals.home,
-                  awayScore: fixture.goals.away,
-                  final: finalStatuses.has(fixture.fixture.status.short),
-                }
-              : null,
+            matched: Boolean(event),
+            matchMethod: event && espnEventIds[game.id] !== undefined ? "eventId" : "teamName",
+            provider: event ? summarizeEvent(event) : null,
           };
         }),
       });
     }
 
     const newResults = games.flatMap((game) => {
-      const fixture = findFixtureForGame(game, fixtures);
-      const result = fixture ? resultFromFixture(game, fixture) : null;
+      const event = findEventForGame(game, events);
+      const result = event ? resultFromEvent(game, event) : null;
       return result ? [result] : [];
     });
 
