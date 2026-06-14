@@ -1,6 +1,4 @@
-import type { GameResult, LeaderboardEntry, Participant, PredictionsByGame } from "./types.js";
-
-type PredictionsByEmail = Record<string, PredictionsByGame>;
+import type { GameResult, LeaderboardEntry, Participant, PredictionsByEmail, PredictionsByGame } from "./types.js";
 
 function outcome(homeScore: number, awayScore: number) {
   return Math.sign(homeScore - awayScore);

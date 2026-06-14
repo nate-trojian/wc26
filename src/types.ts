@@ -24,6 +24,8 @@ export type Prediction = {
 
 export type PredictionsByGame = Record<string, Prediction>;
 
+export type PredictionsByEmail = Record<string, PredictionsByGame>;
+
 export type Participant = {
   email: string;
   name: string;
@@ -42,4 +44,9 @@ export type LeaderboardEntry = {
   exactScores: number;
   outcomes: number;
   predictedGames: number;
+};
+
+export type PredictionMatrixPayload = {
+  participants: Participant[];
+  predictionsByEmail: PredictionsByEmail;
 };

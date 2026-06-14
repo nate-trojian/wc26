@@ -1,11 +1,21 @@
 import "./styles.css";
+import { isAdminEmail } from "./config/admin.js";
 import { isAllowedEmail, normalizeEmail } from "./config/allowedEmails.js";
 import { participants } from "./config/participants.js";
 import { gameSets } from "./data/games.js";
 import { matchResults as seedMatchResults } from "./data/results.js";
 import { teamEspnLinks } from "./data/teamLinks.js";
 import { buildLeaderboard } from "./scoring.js";
-import type { Game, GameResult, GameSet, LeaderboardEntry, PredictionsByGame } from "./types.js";
+import type {
+  Game,
+  GameResult,
+  GameSet,
+  LeaderboardEntry,
+  Participant,
+  PredictionMatrixPayload,
+  PredictionsByEmail,
+  PredictionsByGame,
+} from "./types.js";
 
 const emailStorageKey = "wc26-email";
 const accessTokenStorageKey = "wc26-access-token";
@@ -14,7 +24,7 @@ const app = document.querySelector<HTMLDivElement>("#app");
 const validateEmailsLocally = import.meta.env.DEV;
 const requireAccessToken = !import.meta.env.DEV;
 
-type ActiveView = "predictions" | "leaderboard";
+type ActiveView = "predictions" | "leaderboard" | "predictionMatrix";
 
 type AppState = {
   email: string | null;
@@ -22,6 +32,7 @@ type AppState = {
   predictions: PredictionsByGame;
   matchResults: readonly GameResult[];
   leaderboard: LeaderboardEntry[];
+  predictionMatrix: PredictionMatrixPayload | null;
   leaderboardLoaded: boolean;
   resultsCount: number;
   activeSetId: string;
@@ -37,6 +48,7 @@ const state: AppState = {
   predictions: {},
   matchResults: seedMatchResults,
   leaderboard: [],
+  predictionMatrix: null,
   leaderboardLoaded: false,
   resultsCount: seedMatchResults.length,
   activeSetId: gameSets[0]?.id ?? "first",
@@ -303,7 +315,11 @@ async function fetchLeaderboard() {
   }
 
   if (runningStandaloneViteDev()) {
-    state.leaderboard = buildLeaderboard(participants, loadAllLocalPredictions(), state.matchResults);
+    const predictionsByEmail = loadAllLocalPredictions();
+    state.leaderboard = buildLeaderboard(participants, predictionsByEmail, state.matchResults);
+    state.predictionMatrix = canViewPredictionMatrix()
+      ? { participants: [...participants], predictionsByEmail }
+      : null;
     state.resultsCount = state.matchResults.length;
     state.leaderboardLoaded = true;
     render();
@@ -324,6 +340,7 @@ async function fetchLeaderboard() {
     }
 
     state.leaderboard = payload.leaderboard ?? [];
+    state.predictionMatrix = canViewPredictionMatrix() ? (payload.predictionMatrix ?? null) : null;
     state.resultsCount = payload.resultsCount ?? 0;
     state.leaderboardLoaded = true;
   } catch (error) {
@@ -436,6 +453,7 @@ function login(email: string, accessToken: string) {
   state.email = normalized;
   state.accessToken = token;
   state.activeView = "predictions";
+  state.predictionMatrix = null;
   state.leaderboardLoaded = false;
   fetchPredictions(normalized);
 }
@@ -447,6 +465,7 @@ function logout() {
   state.accessToken = null;
   state.predictions = {};
   state.leaderboard = [];
+  state.predictionMatrix = null;
   state.leaderboardLoaded = false;
   state.matchResults = seedMatchResults;
   state.resultsCount = seedMatchResults.length;
@@ -607,8 +626,45 @@ function renderViewTabs() {
       <button class="${state.activeView === "leaderboard" ? "active" : ""}" data-view="leaderboard" type="button">
         Leaderboard
       </button>
+      ${
+        canViewPredictionMatrix()
+          ? `<button class="${state.activeView === "predictionMatrix" ? "active" : ""}" data-view="predictionMatrix" type="button">
+              Picks
+            </button>`
+          : ""
+      }
     </nav>
   `;
+}
+
+function renderSetTabs(activeSet: GameSet) {
+  return `
+    <div class="section-toolbar">
+      <nav class="set-tabs" aria-label="Game sets">
+        ${gameSets
+          .map(
+            (set) => `
+              <button class="${set.id === activeSet.id ? "active" : ""}" data-set-id="${set.id}" type="button">
+                ${set.name}
+              </button>
+            `,
+          )
+          .join("")}
+      </nav>
+    </div>
+  `;
+}
+
+function canViewPredictionMatrix() {
+  return isAdminEmail(state.email);
+}
+
+function predictionMatrixPayload() {
+  if (state.activeView === "predictionMatrix" && !state.leaderboardLoaded && !state.leaderboardLoading) {
+    queueMicrotask(fetchLeaderboard);
+  }
+
+  return state.predictionMatrix;
 }
 
 function renderLeaderboard() {
@@ -666,7 +722,110 @@ function renderLeaderboard() {
   `;
 }
 
+function scorePartClass(predictedScore: number, finalScore: number) {
+  return predictedScore === finalScore ? "score-correct" : "score-wrong";
+}
+
+function predictionOutcomeClass(
+  prediction: { homeScore: number; awayScore: number } | undefined,
+  result: GameResult | undefined,
+) {
+  if (!prediction || !result) {
+    return "";
+  }
+
+  return scoreOutcome(prediction.homeScore, prediction.awayScore) === scoreOutcome(result.homeScore, result.awayScore)
+    ? "outcome-correct"
+    : "outcome-wrong";
+}
+
+function renderPredictionCell(
+  game: Game,
+  result: GameResult | undefined,
+  predictionsByEmail: PredictionsByEmail,
+  participant: Participant,
+) {
+  const prediction = predictionsByEmail[participant.email]?.[game.id];
+
+  if (!prediction) {
+    return `<td class="prediction-matrix-cell empty">-</td>`;
+  }
+
+  const homeClass = result ? scorePartClass(prediction.homeScore, result.homeScore) : "";
+  const awayClass = result ? scorePartClass(prediction.awayScore, result.awayScore) : "";
+
+  return `
+    <td class="prediction-matrix-cell ${predictionOutcomeClass(prediction, result)}">
+      <span class="${homeClass}">${prediction.homeScore}</span><span class="score-separator">-</span><span class="${awayClass}">${prediction.awayScore}</span>
+    </td>
+  `;
+}
+
+function renderPredictionMatrix(activeSet: GameSet) {
+  const matrix = predictionMatrixPayload();
+  const matrixParticipants = matrix?.participants ?? [];
+  const predictionsByEmail = matrix?.predictionsByEmail ?? {};
+  const games = activeSet.games;
+
+  return `
+    ${renderSetTabs(activeSet)}
+
+    <section class="leaderboard-summary">
+      <div>
+        <span class="summary-value">${games.length}</span>
+        <span class="summary-label">Games</span>
+      </div>
+      <div>
+        <span class="summary-value">${matrixParticipants.length}</span>
+        <span class="summary-label">Players</span>
+      </div>
+      <p>Scores show exact-goal correctness; cells show outcome correctness after a final result is posted.</p>
+    </section>
+
+    ${state.leaderboardLoading ? `<p class="status">Loading picks</p>` : ""}
+
+    <section class="prediction-matrix-wrap" aria-label="${activeSet.name} predictions by player">
+      <table class="prediction-matrix-table">
+        <thead>
+          <tr>
+            <th class="game-column">Game</th>
+            <th>Final</th>
+            ${matrixParticipants.map((participant) => `<th>${participant.name}<span>${participant.email}</span></th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            matrix
+              ? games
+                  .map((game) => {
+                    const result = resultForGame(game.id);
+                    return `
+                      <tr>
+                        <th scope="row" class="game-column">
+                          <span>Match ${game.matchNumber}</span>
+                          <strong>${game.homeTeam} vs ${game.awayTeam}</strong>
+                        </th>
+                        <td class="final-matrix-cell">${result ? `${result.homeScore}-${result.awayScore}` : "TBD"}</td>
+                        ${matrixParticipants
+                          .map((participant) => renderPredictionCell(game, result, predictionsByEmail, participant))
+                          .join("")}
+                      </tr>
+                    `;
+                  })
+                  .join("")
+              : `<tr><td colspan="${Math.max(2, matrixParticipants.length + 2)}">No picks loaded yet.</td></tr>`
+          }
+        </tbody>
+      </table>
+    </section>
+  `;
+}
+
 function renderDashboard() {
+  if (!canViewPredictionMatrix() && state.activeView === "predictionMatrix") {
+    state.activeView = "predictions";
+  }
+
   const activeSet = gameSets.find((set) => set.id === state.activeSetId) ?? gameSets[0];
   const activeDeadline = activeSet ? sectionDeadline(activeSet) : null;
   const activeSetClosed = activeSet ? sectionIsClosed(activeSet) : false;
@@ -679,7 +838,13 @@ function renderDashboard() {
       <header class="topbar">
         <div>
           <p class="eyebrow">WC26 Pool</p>
-          <h1>${state.activeView === "leaderboard" ? "Leaderboard" : "Predictions"}</h1>
+          <h1>${
+            state.activeView === "leaderboard"
+              ? "Leaderboard"
+              : state.activeView === "predictionMatrix"
+                ? "Picks"
+                : "Predictions"
+          }</h1>
         </div>
         <div class="account">
           <span>${state.email}</span>
@@ -694,20 +859,10 @@ function renderDashboard() {
       ${
         state.activeView === "leaderboard"
           ? renderLeaderboard()
-          : `
-      <div class="section-toolbar">
-        <nav class="set-tabs" aria-label="Game sets">
-          ${gameSets
-            .map(
-              (set) => `
-                <button class="${set.id === activeSet.id ? "active" : ""}" data-set-id="${set.id}" type="button">
-                  ${set.name}
-                </button>
-              `,
-            )
-            .join("")}
-        </nav>
-      </div>
+          : state.activeView === "predictionMatrix"
+            ? renderPredictionMatrix(activeSet)
+            : `
+      ${renderSetTabs(activeSet)}
 
       <section class="summary-band">
         <div>
@@ -743,7 +898,8 @@ function renderDashboard() {
   document.querySelector<HTMLButtonElement>("#logout")?.addEventListener("click", logout);
   document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.activeView = (button.dataset.view as ActiveView | undefined) ?? state.activeView;
+      const nextView = (button.dataset.view as ActiveView | undefined) ?? state.activeView;
+      state.activeView = nextView === "predictionMatrix" && !canViewPredictionMatrix() ? "predictions" : nextView;
       render();
     });
   });

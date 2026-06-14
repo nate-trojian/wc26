@@ -596,6 +596,104 @@ button:disabled {
   width: 72px;
 }
 
+.prediction-matrix-wrap {
+  background: #ffffff;
+  border: 1px solid #dde1dc;
+  border-radius: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.prediction-matrix-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 920px;
+  width: 100%;
+}
+
+.prediction-matrix-table th,
+.prediction-matrix-table td {
+  border-bottom: 1px solid #edf0ec;
+  border-right: 1px solid #edf0ec;
+  padding: 12px 14px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.prediction-matrix-table thead th {
+  background: #ffffff;
+  color: #69736d;
+  font-size: 0.72rem;
+  position: sticky;
+  text-transform: uppercase;
+  top: 0;
+  z-index: 2;
+}
+
+.prediction-matrix-table th span {
+  color: #69736d;
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: 3px;
+  text-transform: none;
+}
+
+.prediction-matrix-table th.game-column {
+  left: 0;
+  min-width: 240px;
+  position: sticky;
+  text-align: left;
+  z-index: 3;
+}
+
+.prediction-matrix-table tbody th.game-column {
+  background: #ffffff;
+}
+
+.prediction-matrix-table .game-column strong {
+  color: #17211b;
+  display: block;
+  font-size: 0.9rem;
+  margin-top: 3px;
+}
+
+.final-matrix-cell,
+.prediction-matrix-cell {
+  font-weight: 900;
+}
+
+.prediction-matrix-cell {
+  background: #f8f7f2;
+}
+
+.prediction-matrix-cell.outcome-correct {
+  background: #e7f6ec;
+}
+
+.prediction-matrix-cell.outcome-wrong {
+  background: #fdeae5;
+}
+
+.prediction-matrix-cell.empty {
+  color: #9ca49d;
+  font-weight: 700;
+}
+
+.prediction-matrix-cell .score-correct {
+  color: #14613f;
+}
+
+.prediction-matrix-cell .score-wrong {
+  color: #9d3d1b;
+}
+
+.score-separator {
+  color: #69736d;
+  padding: 0 2px;
+}
+
 @media (max-width: 720px) {
   .login-row,
   .prediction-grid,

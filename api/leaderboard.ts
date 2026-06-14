@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { isAdminEmail } from "../src/config/admin.js";
 import { normalizeEmail } from "../src/config/allowedEmails.js";
 import { buildLeaderboard } from "../src/scoring.js";
 import type { Participant } from "../src/types.js";
@@ -44,6 +45,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
     response.status(200).json({
       leaderboard: buildLeaderboard(participants, predictionsByEmail, matchResults),
+      predictionMatrix: isAdminEmail(email) ? { participants, predictionsByEmail } : undefined,
       resultsCount: matchResults.length,
     });
   } catch (error) {
