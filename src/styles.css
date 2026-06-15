@@ -681,17 +681,46 @@ button:disabled {
   font-weight: 700;
 }
 
-.prediction-matrix-cell .score-correct {
+.score-box-pair {
+  align-items: center;
+  display: inline-grid;
+  gap: 3px;
+  grid-template-columns: 28px auto 28px;
+}
+
+.score-box {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d9ded8;
+  border-radius: 4px;
+  color: #17211b;
+  display: inline-flex;
+  font-size: 0.82rem;
+  height: 26px;
+  justify-content: center;
+  min-width: 28px;
+  padding: 0 6px;
+}
+
+.score-box.score-correct {
+  background: #d7f0df;
+  border-color: #23935c;
   color: #14613f;
 }
 
-.prediction-matrix-cell .score-wrong {
+.score-box.score-wrong {
+  background: #f8d8ce;
+  border-color: #c44f26;
   color: #9d3d1b;
 }
 
 .score-separator {
   color: #69736d;
-  padding: 0 2px;
+  font-size: 0.78rem;
+}
+
+.mobile-picks-status {
+  display: none;
 }
 
 @media (max-width: 720px) {
@@ -724,6 +753,15 @@ button:disabled {
 
   .section-toolbar {
     display: grid;
+  }
+
+  .desktop-only-view,
+  .prediction-matrix-view {
+    display: none;
+  }
+
+  .mobile-picks-status {
+    display: block;
   }
 
   .deadline-band {

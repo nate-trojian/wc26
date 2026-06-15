@@ -628,7 +628,7 @@ function renderViewTabs() {
       </button>
       ${
         canViewPredictionMatrix()
-          ? `<button class="${state.activeView === "predictionMatrix" ? "active" : ""}" data-view="predictionMatrix" type="button">
+          ? `<button class="desktop-only-view ${state.activeView === "predictionMatrix" ? "active" : ""}" data-view="predictionMatrix" type="button">
               Picks
             </button>`
           : ""
@@ -744,8 +744,13 @@ function renderPredictionCell(
   result: GameResult | undefined,
   predictionsByEmail: PredictionsByEmail,
   participant: Participant,
+  revealPicks: boolean,
 ) {
   const prediction = predictionsByEmail[participant.email]?.[game.id];
+
+  if (!revealPicks) {
+    return `<td class="prediction-matrix-cell pending">TBD</td>`;
+  }
 
   if (!prediction) {
     return `<td class="prediction-matrix-cell empty">-</td>`;
@@ -756,7 +761,11 @@ function renderPredictionCell(
 
   return `
     <td class="prediction-matrix-cell ${predictionOutcomeClass(prediction, result)}">
-      <span class="${homeClass}">${prediction.homeScore}</span><span class="score-separator">-</span><span class="${awayClass}">${prediction.awayScore}</span>
+      <span class="score-box-pair">
+        <span class="score-box ${homeClass}">${prediction.homeScore}</span>
+        <span class="score-separator">-</span>
+        <span class="score-box ${awayClass}">${prediction.awayScore}</span>
+      </span>
     </td>
   `;
 }
@@ -766,58 +775,68 @@ function renderPredictionMatrix(activeSet: GameSet) {
   const matrixParticipants = matrix?.participants ?? [];
   const predictionsByEmail = matrix?.predictionsByEmail ?? {};
   const games = activeSet.games;
+  const revealPicks = sectionIsClosed(activeSet);
 
   return `
-    ${renderSetTabs(activeSet)}
+    <div class="prediction-matrix-view">
+      ${renderSetTabs(activeSet)}
 
-    <section class="leaderboard-summary">
-      <div>
-        <span class="summary-value">${games.length}</span>
-        <span class="summary-label">Games</span>
-      </div>
-      <div>
-        <span class="summary-value">${matrixParticipants.length}</span>
-        <span class="summary-label">Players</span>
-      </div>
-      <p>Scores show exact-goal correctness; cells show outcome correctness after a final result is posted.</p>
-    </section>
+      <section class="leaderboard-summary">
+        <div>
+          <span class="summary-value">${games.length}</span>
+          <span class="summary-label">Games</span>
+        </div>
+        <div>
+          <span class="summary-value">${matrixParticipants.length}</span>
+          <span class="summary-label">Players</span>
+        </div>
+        <p>${
+          revealPicks
+            ? "Scores show exact-goal correctness; cells show outcome correctness after a final result is posted."
+            : "Picks for this set are hidden until predictions lock."
+        }</p>
+      </section>
 
-    ${state.leaderboardLoading ? `<p class="status">Loading picks</p>` : ""}
+      ${state.leaderboardLoading ? `<p class="status">Loading picks</p>` : ""}
 
-    <section class="prediction-matrix-wrap" aria-label="${activeSet.name} predictions by player">
-      <table class="prediction-matrix-table">
-        <thead>
-          <tr>
-            <th class="game-column">Game</th>
-            <th>Final</th>
-            ${matrixParticipants.map((participant) => `<th>${participant.name}<span>${participant.email}</span></th>`).join("")}
-          </tr>
-        </thead>
-        <tbody>
-          ${
-            matrix
-              ? games
-                  .map((game) => {
-                    const result = resultForGame(game.id);
-                    return `
-                      <tr>
-                        <th scope="row" class="game-column">
-                          <span>Match ${game.matchNumber}</span>
-                          <strong>${game.homeTeam} vs ${game.awayTeam}</strong>
-                        </th>
-                        <td class="final-matrix-cell">${result ? `${result.homeScore}-${result.awayScore}` : "TBD"}</td>
-                        ${matrixParticipants
-                          .map((participant) => renderPredictionCell(game, result, predictionsByEmail, participant))
-                          .join("")}
-                      </tr>
-                    `;
-                  })
-                  .join("")
-              : `<tr><td colspan="${Math.max(2, matrixParticipants.length + 2)}">No picks loaded yet.</td></tr>`
-          }
-        </tbody>
-      </table>
-    </section>
+      <section class="prediction-matrix-wrap" aria-label="${activeSet.name} predictions by player">
+        <table class="prediction-matrix-table">
+          <thead>
+            <tr>
+              <th class="game-column">Game</th>
+              <th>Final</th>
+              ${matrixParticipants.map((participant) => `<th>${participant.name}<span>${participant.email}</span></th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              matrix
+                ? games
+                    .map((game) => {
+                      const result = resultForGame(game.id);
+                      return `
+                        <tr>
+                          <th scope="row" class="game-column">
+                            <span>Match ${game.matchNumber}</span>
+                            <strong>${game.homeTeam} vs ${game.awayTeam}</strong>
+                          </th>
+                          <td class="final-matrix-cell">${result ? `${result.homeScore}-${result.awayScore}` : "TBD"}</td>
+                          ${matrixParticipants
+                            .map((participant) =>
+                              renderPredictionCell(game, result, predictionsByEmail, participant, revealPicks),
+                            )
+                            .join("")}
+                        </tr>
+                      `;
+                    })
+                    .join("")
+                : `<tr><td colspan="${Math.max(2, matrixParticipants.length + 2)}">No picks loaded yet.</td></tr>`
+            }
+          </tbody>
+        </table>
+      </section>
+    </div>
+    <p class="status mobile-picks-status">Picks are available on larger screens.</p>
   `;
 }
 
