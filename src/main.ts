@@ -20,6 +20,8 @@ import type {
 const emailStorageKey = "wc26-email";
 const accessTokenStorageKey = "wc26-access-token";
 const localPredictionsStoragePrefix = "wc26-local-predictions";
+const currentGameWindowBeforeMs = 45 * 60 * 1000;
+const currentGameWindowAfterMs = 135 * 60 * 1000;
 const app = document.querySelector<HTMLDivElement>("#app");
 const validateEmailsLocally = import.meta.env.DEV;
 const requireAccessToken = !import.meta.env.DEV;
@@ -211,6 +213,30 @@ function setMessage(message: string, anchoredGameId?: string, anchorTop?: number
 
 function completedCount(games: readonly Game[]) {
   return games.filter((game) => state.predictions[game.id]).length;
+}
+
+function jumpTargetForSet(set: GameSet, now = Date.now()) {
+  const gamesByKickoff = set.games
+    .map((game) => ({ game, kickoff: parseGameDate(game.dateTime).getTime() }))
+    .filter(({ kickoff }) => !Number.isNaN(kickoff))
+    .sort((a, b) => a.kickoff - b.kickoff);
+
+  return (
+    gamesByKickoff.find(
+      ({ kickoff }) => now >= kickoff - currentGameWindowBeforeMs && now <= kickoff + currentGameWindowAfterMs,
+    )?.game ??
+    gamesByKickoff.find(({ kickoff }) => kickoff > now)?.game ??
+    null
+  );
+}
+
+function jumpToGame(gameId: string) {
+  const card = document.querySelector<HTMLElement>(gameCardSelector(gameId));
+  if (!card) {
+    return;
+  }
+
+  card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function runningStandaloneViteDev() {
@@ -850,6 +876,7 @@ function renderDashboard() {
   const activeSetClosed = activeSet ? sectionIsClosed(activeSet) : false;
   const activeSavedCount = activeSet ? completedCount(activeSet.games) : 0;
   const activeGamesCount = activeSet?.games.length ?? 0;
+  const jumpTargetGame = activeSet && activeSetClosed ? jumpTargetForSet(activeSet) : null;
   const progress = activeGamesCount > 0 ? Math.round((activeSavedCount / activeGamesCount) * 100) : 0;
 
   app!.innerHTML = `
@@ -899,6 +926,11 @@ function renderDashboard() {
           <span>${activeSetClosed ? "Closed" : "Due"}</span>
           <strong>${activeDeadline ? formatDeadline(activeDeadline) : "TBD"}</strong>
         </div>
+        ${
+          jumpTargetGame
+            ? `<button id="jump-current-game" class="jump-current-button" type="button">Jump to Current Game</button>`
+            : ""
+        }
       </section>
 
       ${state.loading ? `<p class="status">Loading</p>` : ""}
@@ -935,6 +967,11 @@ function renderDashboard() {
         savePrediction(game);
       }
     });
+  });
+  document.querySelector<HTMLButtonElement>("#jump-current-game")?.addEventListener("click", () => {
+    if (jumpTargetGame) {
+      jumpToGame(jumpTargetGame.id);
+    }
   });
   activeSet.games.forEach((game) => {
     document.querySelector<HTMLInputElement>(`#${game.id}-home`)?.addEventListener("input", () => {
