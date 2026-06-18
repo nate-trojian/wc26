@@ -53,8 +53,14 @@ export default async function handler(request: VercelRequest, response: VercelRe
 
   if (request.method === "GET") {
     try {
+      const scoresOnly = request.query.scoresOnly === "true";
       const results = await readResults();
       const matchStatuses = await readMatchStatuses();
+      if (scoresOnly) {
+        response.status(200).json({ email: normalizeEmail(email), results, matchStatuses });
+        return;
+      }
+
       const predictions = await readPredictions(email);
       response.status(200).json({ email: normalizeEmail(email), predictions, results, matchStatuses });
     } catch (error) {

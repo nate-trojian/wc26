@@ -24,6 +24,7 @@ const localPredictionsStoragePrefix = "wc26-local-predictions";
 const currentGameWindowBeforeMs = 45 * 60 * 1000;
 const currentGameWindowAfterMs = 135 * 60 * 1000;
 const scoreRefreshMs = 5 * 60 * 1000;
+const idleScoreRefreshMs = 30 * 60 * 1000;
 const app = document.querySelector<HTMLDivElement>("#app");
 const validateEmailsLocally = import.meta.env.DEV;
 const requireAccessToken = !import.meta.env.DEV;
@@ -238,6 +239,23 @@ function jumpTargetForSet(set: GameSet, now = Date.now()) {
   );
 }
 
+function hasCurrentGameRefreshWindow(now = Date.now()) {
+  return gameSets
+    .flatMap((set) => set.games)
+    .some((game) => {
+      const kickoff = parseGameDate(game.dateTime).getTime();
+      return (
+        !Number.isNaN(kickoff) &&
+        now >= kickoff - currentGameWindowBeforeMs &&
+        now <= kickoff + currentGameWindowAfterMs
+      );
+    });
+}
+
+function nextScoreRefreshMs() {
+  return hasCurrentGameRefreshWindow() ? scoreRefreshMs : idleScoreRefreshMs;
+}
+
 function jumpToGame(gameId: string) {
   const card = document.querySelector<HTMLElement>(gameCardSelector(gameId));
   if (!card) {
@@ -320,7 +338,12 @@ async function fetchPredictions(email: string, options: { silent?: boolean } = {
   }
 
   try {
-    const response = await fetch(`/api/predictions?email=${encodeURIComponent(email)}`, {
+    const params = new URLSearchParams({ email });
+    if (options.silent) {
+      params.set("scoresOnly", "true");
+    }
+
+    const response = await fetch(`/api/predictions?${params.toString()}`, {
       headers: authHeaders(),
     });
     const payload = await readJsonResponse(response);
@@ -332,7 +355,9 @@ async function fetchPredictions(email: string, options: { silent?: boolean } = {
       throw new Error(payload.error ?? "Could not load predictions.");
     }
 
-    state.predictions = payload.predictions ?? {};
+    if (payload.predictions) {
+      state.predictions = payload.predictions;
+    }
     state.matchResults = payload.results ?? [];
     state.matchStatuses = payload.matchStatuses ?? [];
     state.resultsCount = state.matchResults.length;
@@ -1038,12 +1063,21 @@ function render() {
 
 render();
 
+function refreshScores() {
+  if (canUseStoredCredentials() && canUseEmailLocally(state.email ?? "")) {
+    fetchPredictions(state.email!, { silent: true });
+  }
+}
+
+function scheduleScoreRefresh() {
+  window.setTimeout(() => {
+    refreshScores();
+    scheduleScoreRefresh();
+  }, nextScoreRefreshMs());
+}
+
 if (canUseStoredCredentials() && canUseEmailLocally(state.email ?? "")) {
   fetchPredictions(state.email!);
 }
 
-window.setInterval(() => {
-  if (canUseStoredCredentials() && canUseEmailLocally(state.email ?? "")) {
-    fetchPredictions(state.email!, { silent: true });
-  }
-}, scoreRefreshMs);
+scheduleScoreRefresh();

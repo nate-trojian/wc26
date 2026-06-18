@@ -1,8 +1,11 @@
 import { get, put, type BlobAccessType } from "@vercel/blob";
 import type { MatchStatus } from "../src/types.js";
+import { cacheTtlMs, readThroughCache, writeThroughCache } from "./serverCache.js";
 
 const matchStatusStorageUnavailableMessage =
   "Match status storage is not configured. Connect a Vercel Blob store for this deployment.";
+const matchStatusCacheTtlMs = cacheTtlMs("MATCH_STATUSES_CACHE_TTL_MS", 60 * 1000);
+const blobCacheMaxAgeSeconds = Math.max(60, Math.ceil(matchStatusCacheTtlMs / 1000));
 
 export class MatchStatusStorageError extends Error {
   constructor(message = matchStatusStorageUnavailableMessage) {
@@ -35,7 +38,7 @@ async function readWithAccessFallback(pathname: string) {
   try {
     const saved = await get(pathname, {
       access: primaryAccess,
-      useCache: false,
+      useCache: true,
       ...blobAuthOptions(),
     });
     if (saved) {
@@ -44,14 +47,14 @@ async function readWithAccessFallback(pathname: string) {
 
     return await get(pathname, {
       access: alternateAccess,
-      useCache: false,
+      useCache: true,
       ...blobAuthOptions(),
     });
   } catch (primaryError) {
     try {
       return await get(pathname, {
         access: alternateAccess,
-        useCache: false,
+        useCache: true,
         ...blobAuthOptions(),
       });
     } catch {
@@ -107,7 +110,7 @@ function mergeMatchStatuses(statuses: readonly MatchStatus[]) {
   return Array.from(new Map(statuses.map((status) => [status.gameId, status])).values());
 }
 
-export async function readMatchStatuses(): Promise<readonly MatchStatus[]> {
+async function readMatchStatusesUncached(): Promise<readonly MatchStatus[]> {
   try {
     const saved = await readWithAccessFallback(matchStatusBlobPath());
     if (!saved) {
@@ -129,6 +132,14 @@ export async function readMatchStatuses(): Promise<readonly MatchStatus[]> {
   }
 }
 
+export async function readMatchStatuses(): Promise<readonly MatchStatus[]> {
+  return readThroughCache(
+    `match-statuses:${matchStatusBlobPath()}:${primaryBlobAccess()}`,
+    matchStatusCacheTtlMs,
+    readMatchStatusesUncached,
+  );
+}
+
 export async function saveMatchStatuses(statuses: readonly MatchStatus[]) {
   try {
     const mergedStatuses = mergeMatchStatuses(statuses);
@@ -137,8 +148,14 @@ export async function saveMatchStatuses(statuses: readonly MatchStatus[]) {
         access,
         allowOverwrite: true,
         contentType: "application/json",
+        cacheControlMaxAge: blobCacheMaxAgeSeconds,
         ...blobAuthOptions(),
       }),
+    );
+    writeThroughCache(
+      `match-statuses:${matchStatusBlobPath()}:${primaryBlobAccess()}`,
+      mergedStatuses,
+      matchStatusCacheTtlMs,
     );
   } catch (error) {
     throw matchStatusStorageError(error);

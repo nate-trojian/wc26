@@ -1,9 +1,12 @@
 import { get, put, type BlobAccessType } from "@vercel/blob";
 import { matchResults } from "../src/data/results.js";
 import type { GameResult } from "../src/types.js";
+import { cacheTtlMs, readThroughCache, writeThroughCache } from "./serverCache.js";
 
 const resultStorageUnavailableMessage =
   "Result storage is not configured. Connect a Vercel Blob store for this deployment.";
+const resultCacheTtlMs = cacheTtlMs("RESULTS_CACHE_TTL_MS", 60 * 1000);
+const blobCacheMaxAgeSeconds = Math.max(60, Math.ceil(resultCacheTtlMs / 1000));
 
 export class ResultStorageError extends Error {
   constructor(message = resultStorageUnavailableMessage) {
@@ -36,7 +39,7 @@ async function readWithAccessFallback(pathname: string) {
   try {
     const saved = await get(pathname, {
       access: primaryAccess,
-      useCache: false,
+      useCache: true,
       ...blobAuthOptions(),
     });
     if (saved) {
@@ -45,14 +48,14 @@ async function readWithAccessFallback(pathname: string) {
 
     return await get(pathname, {
       access: alternateAccess,
-      useCache: false,
+      useCache: true,
       ...blobAuthOptions(),
     });
   } catch (primaryError) {
     try {
       return await get(pathname, {
         access: alternateAccess,
-        useCache: false,
+        useCache: true,
         ...blobAuthOptions(),
       });
     } catch {
@@ -103,7 +106,7 @@ function mergeResults(results: readonly GameResult[]) {
   return Array.from(new Map(results.map((result) => [result.gameId, result])).values());
 }
 
-export async function readResults(): Promise<readonly GameResult[]> {
+async function readResultsUncached(): Promise<readonly GameResult[]> {
   try {
     const saved = await readWithAccessFallback(resultBlobPath());
     if (!saved) {
@@ -125,6 +128,10 @@ export async function readResults(): Promise<readonly GameResult[]> {
   }
 }
 
+export async function readResults(): Promise<readonly GameResult[]> {
+  return readThroughCache(`results:${resultBlobPath()}:${primaryBlobAccess()}`, resultCacheTtlMs, readResultsUncached);
+}
+
 export async function saveResults(results: readonly GameResult[]) {
   try {
     const mergedResults = mergeResults([...matchResults, ...results]);
@@ -133,9 +140,11 @@ export async function saveResults(results: readonly GameResult[]) {
         access,
         allowOverwrite: true,
         contentType: "application/json",
+        cacheControlMaxAge: blobCacheMaxAgeSeconds,
         ...blobAuthOptions(),
       }),
     );
+    writeThroughCache(`results:${resultBlobPath()}:${primaryBlobAccess()}`, mergedResults, resultCacheTtlMs);
   } catch (error) {
     throw resultStorageError(error);
   }

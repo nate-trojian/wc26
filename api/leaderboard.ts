@@ -4,7 +4,7 @@ import { normalizeEmail } from "../src/config/allowedEmails.js";
 import { buildLeaderboard } from "../src/scoring.js";
 import type { Participant } from "../src/types.js";
 import { allowlistStorageErrorMessage, isAuthorizedParticipant, readParticipants } from "./participantStore.js";
-import { predictionStorageErrorMessage, readPredictions } from "./predictionStore.js";
+import { predictionStorageErrorMessage, readPredictionsCached } from "./predictionStore.js";
 import { readResults, resultStorageErrorMessage } from "./resultStore.js";
 
 function sendError(response: VercelResponse, status: number, message: string) {
@@ -39,7 +39,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
     const matchResults = await readResults();
     const predictionsByEmail = Object.fromEntries(
       await Promise.all(
-        participants.map(async (participant) => [participant.email, await readPredictions(participant.email)] as const),
+        participants.map(async (participant) => [participant.email, await readPredictionsCached(participant.email)] as const),
       ),
     );
 

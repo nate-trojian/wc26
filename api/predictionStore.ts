@@ -2,9 +2,11 @@ import { createHash } from "node:crypto";
 import { get, put, type BlobAccessType } from "@vercel/blob";
 import { normalizeEmail } from "../src/config/allowedEmails.js";
 import type { PredictionsByGame } from "../src/types.js";
+import { cacheTtlMs, readThroughCache, writeThroughCache } from "./serverCache.js";
 
 const storageUnavailableMessage =
   "Prediction storage is not configured. Connect a Vercel Blob store for this deployment.";
+const predictionCacheTtlMs = cacheTtlMs("PREDICTIONS_CACHE_TTL_MS", 60 * 1000);
 
 export class PredictionStorageError extends Error {
   constructor(message = storageUnavailableMessage) {
@@ -103,6 +105,13 @@ export async function readPredictions(email: string): Promise<PredictionsByGame>
   }
 }
 
+export async function readPredictionsCached(email: string): Promise<PredictionsByGame> {
+  const normalized = normalizeEmail(email);
+  return readThroughCache(`predictions:${predictionPath(normalized)}:${primaryBlobAccess()}`, predictionCacheTtlMs, () =>
+    readPredictions(normalized),
+  );
+}
+
 export async function savePredictions(email: string, predictions: PredictionsByGame) {
   try {
     await withBlobAccessFallback((access) =>
@@ -113,6 +122,7 @@ export async function savePredictions(email: string, predictions: PredictionsByG
         ...blobAuthOptions(),
       }),
     );
+    writeThroughCache(`predictions:${predictionPath(email)}:${primaryBlobAccess()}`, predictions, predictionCacheTtlMs);
   } catch (error) {
     throw storageError(error);
   }

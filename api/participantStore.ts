@@ -3,6 +3,7 @@ import { get } from "@vercel/blob";
 import { allowedEmails, normalizeEmail } from "../src/config/allowedEmails.js";
 import { participants as localParticipants } from "../src/config/participants.js";
 import type { Participant } from "../src/types.js";
+import { cacheTtlMs, readThroughCache } from "./serverCache.js";
 
 type ParticipantWithToken = Participant & {
   tokenHash?: string;
@@ -12,6 +13,7 @@ type BlobAllowlist = string[] | { emails?: readonly string[]; participants?: rea
 
 const allowlistStorageUnavailableMessage =
   "Email allowlist storage is not configured. Connect a Vercel Blob store for this deployment.";
+const allowlistCacheTtlMs = cacheTtlMs("ALLOWLIST_CACHE_TTL_MS", Number.POSITIVE_INFINITY);
 
 export class AllowlistStorageError extends Error {
   constructor(message = allowlistStorageUnavailableMessage) {
@@ -97,15 +99,11 @@ function allowlistStorageError(error: unknown) {
   return new AllowlistStorageError(`Email allowlist storage is unavailable. ${message}`);
 }
 
-export async function readParticipants(): Promise<readonly Participant[]> {
-  if (!shouldReadAllowlistFromBlob()) {
-    return localParticipants;
-  }
-
+async function readParticipantsFromBlob(): Promise<readonly Participant[]> {
   try {
     const saved = await get(allowlistBlobPath(), {
       access: "private",
-      useCache: false,
+      useCache: true,
       ...blobAuthOptions(),
     });
 
@@ -117,6 +115,14 @@ export async function readParticipants(): Promise<readonly Participant[]> {
   } catch (error) {
     throw allowlistStorageError(error);
   }
+}
+
+export async function readParticipants(): Promise<readonly Participant[]> {
+  if (!shouldReadAllowlistFromBlob()) {
+    return localParticipants;
+  }
+
+  return readThroughCache(`allowlist:${allowlistBlobPath()}`, allowlistCacheTtlMs, readParticipantsFromBlob);
 }
 
 export async function isAllowedParticipantEmail(email: string) {
