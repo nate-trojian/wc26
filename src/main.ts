@@ -10,6 +10,7 @@ import type {
   Game,
   GameResult,
   GameSet,
+  GameSetId,
   LeaderboardEntry,
   MatchStatus,
   Participant,
@@ -41,12 +42,23 @@ type AppState = {
   predictionMatrix: PredictionMatrixPayload | null;
   leaderboardLoaded: boolean;
   resultsCount: number;
-  activeSetId: string;
+  activeSetId: GameSetId;
   activeView: ActiveView;
   loading: boolean;
   leaderboardLoading: boolean;
   message: string;
 };
+
+function defaultActiveSetId(now = Date.now()): GameSetId {
+  return (
+    gameSets
+      .map((set) => ({ id: set.id, startsAt: set.games[0] ? parseGameDate(set.games[0].dateTime).getTime() : NaN }))
+      .filter(({ startsAt }) => !Number.isNaN(startsAt) && startsAt <= now)
+      .sort((a, b) => b.startsAt - a.startsAt)[0]?.id ??
+    gameSets[0]?.id ??
+    "first"
+  );
+}
 
 const state: AppState = {
   email: localStorage.getItem(emailStorageKey),
@@ -58,7 +70,7 @@ const state: AppState = {
   predictionMatrix: null,
   leaderboardLoaded: false,
   resultsCount: seedMatchResults.length,
-  activeSetId: gameSets[0]?.id ?? "first",
+  activeSetId: defaultActiveSetId(),
   activeView: "predictions",
   loading: false,
   leaderboardLoading: false,
@@ -1021,7 +1033,8 @@ function renderDashboard() {
   });
   document.querySelectorAll<HTMLButtonElement>("[data-set-id]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.activeSetId = button.dataset.setId ?? state.activeSetId;
+      const nextSet = gameSets.find((set) => set.id === button.dataset.setId);
+      state.activeSetId = nextSet?.id ?? state.activeSetId;
       render();
     });
   });
