@@ -135,6 +135,24 @@ function matchStatusForGame(gameId: string): MatchStatus | undefined {
   return state.matchStatuses.find((status) => status.gameId === gameId);
 }
 
+function readableStatusName(statusName: string) {
+  const statusLabels: Record<string, string> = {
+    STATUS_FIRST_HALF: "1H",
+    STATUS_HALFTIME: "HT",
+    STATUS_SECOND_HALF: "2H",
+    STATUS_FULL_TIME: "FT",
+    STATUS_FINAL: "Final",
+    STATUS_SCHEDULED: "Scheduled",
+  };
+
+  return statusLabels[statusName] ?? statusName;
+}
+
+function liveStatusLabel(status: MatchStatus) {
+  const statusName = readableStatusName(status.statusName);
+  return status.displayClock ? `${statusName} ${status.displayClock}` : statusName;
+}
+
 function scoreOutcome(homeScore: number, awayScore: number) {
   return Math.sign(homeScore - awayScore);
 }
@@ -639,7 +657,7 @@ function renderGame(game: Game) {
             </div>`
           : showLiveScore
             ? `<div class="live-score" aria-label="Live score">
-              <span>${liveStatus.statusName}</span>
+              <span>${liveStatusLabel(liveStatus)}</span>
               <strong>
                 ${renderTeamLink(game.homeTeamId, game.homeTeam)}
                 ${liveStatus.homeScore}-${liveStatus.awayScore}

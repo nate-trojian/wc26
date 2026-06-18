@@ -43,6 +43,7 @@ export type MatchStatus = {
   gameId: string;
   state: MatchStatusState;
   statusName: string;
+  displayClock?: string;
   completed: boolean;
   homeScore: number | null;
   awayScore: number | null;

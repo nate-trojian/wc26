@@ -98,6 +98,7 @@ function validMatchStatus(value: unknown): value is MatchStatus {
     typeof status?.gameId === "string" &&
     (status.state === "pre" || status.state === "in" || status.state === "post") &&
     typeof status.statusName === "string" &&
+    (status.displayClock === undefined || typeof status.displayClock === "string") &&
     typeof status.completed === "boolean" &&
     validNullableScore(status.homeScore) &&
     validNullableScore(status.awayScore) &&

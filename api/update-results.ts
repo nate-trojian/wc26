@@ -28,6 +28,7 @@ type EspnCompetition = {
   id: string;
   date: string;
   status: {
+    displayClock?: string;
     type: {
       name: string;
       state: string;
@@ -244,6 +245,19 @@ function statusStateFromEvent(event: EspnEvent): MatchStatusState {
   return state === "in" || state === "post" ? state : "pre";
 }
 
+function readableStatusName(statusName: string | null | undefined) {
+  const statusLabels: Record<string, string> = {
+    STATUS_FIRST_HALF: "1H",
+    STATUS_HALFTIME: "HT",
+    STATUS_SECOND_HALF: "2H",
+    STATUS_FULL_TIME: "FT",
+    STATUS_FINAL: "Final",
+    STATUS_SCHEDULED: "Scheduled",
+  };
+
+  return statusName ? (statusLabels[statusName] ?? statusName) : "Unknown";
+}
+
 function matchStatusFromEvent(game: Game, event: EspnEvent, lastUpdatedAt: string): MatchStatus {
   const { competition, home, away } = competitorsForEvent(event);
   const homeScore = Number(home?.score);
@@ -252,7 +266,8 @@ function matchStatusFromEvent(game: Game, event: EspnEvent, lastUpdatedAt: strin
   return {
     gameId: game.id,
     state: statusStateFromEvent(event),
-    statusName: competition?.status.type.name ?? "Unknown",
+    statusName: readableStatusName(competition?.status.type.name),
+    displayClock: competition?.status.displayClock,
     completed: competition?.status.type.completed ?? false,
     homeScore: Number.isInteger(homeScore) ? homeScore : null,
     awayScore: Number.isInteger(awayScore) ? awayScore : null,
