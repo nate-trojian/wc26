@@ -375,7 +375,8 @@ button:disabled {
   font-weight: 900;
 }
 
-.final-score {
+.final-score,
+.live-score {
   align-items: center;
   background: #f3f7f2;
   border: 1px solid #d7e3d7;
@@ -386,17 +387,28 @@ button:disabled {
   padding: 10px 12px;
 }
 
-.final-score span {
+.final-score span,
+.live-score span {
   color: #1f7a57;
   font-size: 0.78rem;
   font-weight: 900;
   text-transform: uppercase;
 }
 
-.final-score strong {
+.final-score strong,
+.live-score strong {
   color: #17211b;
   font-size: 0.98rem;
   text-align: right;
+}
+
+.live-score {
+  background: #fff6df;
+  border-color: #e5c872;
+}
+
+.live-score span {
+  color: #9d6a15;
 }
 
 .prediction-grid {
@@ -811,6 +823,7 @@ button:disabled {
   }
 
   .final-score,
+  .live-score,
   .predicted-outcome,
   .points-earned {
     gap: 8px;
@@ -818,12 +831,14 @@ button:disabled {
   }
 
   .final-score span,
+  .live-score span,
   .predicted-outcome span,
   .points-earned span {
     font-size: 0.7rem;
   }
 
   .final-score strong,
+  .live-score strong,
   .predicted-outcome strong {
     font-size: 0.9rem;
   }
@@ -832,7 +847,8 @@ button:disabled {
     font-size: 0.98rem;
   }
 
-  .final-score {
+  .final-score,
+  .live-score {
     align-items: start;
     display: grid;
   }
@@ -848,6 +864,7 @@ button:disabled {
   }
 
   .final-score strong,
+  .live-score strong,
   .predicted-outcome strong,
   .points-earned strong {
     text-align: left;

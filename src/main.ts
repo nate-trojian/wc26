@@ -11,6 +11,7 @@ import type {
   GameResult,
   GameSet,
   LeaderboardEntry,
+  MatchStatus,
   Participant,
   PredictionMatrixPayload,
   PredictionsByEmail,
@@ -22,6 +23,7 @@ const accessTokenStorageKey = "wc26-access-token";
 const localPredictionsStoragePrefix = "wc26-local-predictions";
 const currentGameWindowBeforeMs = 45 * 60 * 1000;
 const currentGameWindowAfterMs = 135 * 60 * 1000;
+const scoreRefreshMs = 5 * 60 * 1000;
 const app = document.querySelector<HTMLDivElement>("#app");
 const validateEmailsLocally = import.meta.env.DEV;
 const requireAccessToken = !import.meta.env.DEV;
@@ -33,6 +35,7 @@ type AppState = {
   accessToken: string | null;
   predictions: PredictionsByGame;
   matchResults: readonly GameResult[];
+  matchStatuses: readonly MatchStatus[];
   leaderboard: LeaderboardEntry[];
   predictionMatrix: PredictionMatrixPayload | null;
   leaderboardLoaded: boolean;
@@ -49,6 +52,7 @@ const state: AppState = {
   accessToken: localStorage.getItem(accessTokenStorageKey),
   predictions: {},
   matchResults: seedMatchResults,
+  matchStatuses: [],
   leaderboard: [],
   predictionMatrix: null,
   leaderboardLoaded: false,
@@ -112,6 +116,10 @@ function gameSetForGame(game: Game) {
 
 function resultForGame(gameId: string): GameResult | undefined {
   return state.matchResults.find((result) => result.gameId === gameId);
+}
+
+function matchStatusForGame(gameId: string): MatchStatus | undefined {
+  return state.matchStatuses.find((status) => status.gameId === gameId);
 }
 
 function scoreOutcome(homeScore: number, awayScore: number) {
@@ -295,18 +303,21 @@ async function readJsonResponse(response: Response) {
   return response.json();
 }
 
-async function fetchPredictions(email: string) {
+async function fetchPredictions(email: string, options: { silent?: boolean } = {}) {
   if (runningStandaloneViteDev()) {
     state.predictions = loadLocalPredictions(email);
     state.matchResults = seedMatchResults;
+    state.matchStatuses = [];
     state.resultsCount = seedMatchResults.length;
     state.message = "";
     render();
     return;
   }
 
-  state.loading = true;
-  render();
+  if (!options.silent) {
+    state.loading = true;
+    render();
+  }
 
   try {
     const response = await fetch(`/api/predictions?email=${encodeURIComponent(email)}`, {
@@ -323,14 +334,19 @@ async function fetchPredictions(email: string) {
 
     state.predictions = payload.predictions ?? {};
     state.matchResults = payload.results ?? [];
+    state.matchStatuses = payload.matchStatuses ?? [];
     state.resultsCount = state.matchResults.length;
-    state.message = "";
+    if (!options.silent) {
+      state.message = "";
+    }
   } catch (error) {
-    if (state.email) {
+    if (state.email && !options.silent) {
       state.message = error instanceof Error ? error.message : "Could not load predictions.";
     }
   } finally {
-    state.loading = false;
+    if (!options.silent) {
+      state.loading = false;
+    }
     render();
   }
 }
@@ -494,6 +510,7 @@ function logout() {
   state.predictionMatrix = null;
   state.leaderboardLoaded = false;
   state.matchResults = seedMatchResults;
+  state.matchStatuses = [];
   state.resultsCount = seedMatchResults.length;
   state.activeView = "predictions";
   state.message = "";
@@ -541,6 +558,12 @@ function renderGame(game: Game) {
   const prediction = state.predictions[game.id];
   const gameSet = gameSetForGame(game);
   const result = resultForGame(game.id);
+  const liveStatus = matchStatusForGame(game.id);
+  const showLiveScore =
+    !result &&
+    liveStatus?.state === "in" &&
+    liveStatus.homeScore !== null &&
+    liveStatus.awayScore !== null;
   const isFinal = Boolean(result);
   const closed = isFinal || (gameSet ? sectionIsClosed(gameSet) : false);
   const homeValue = prediction?.homeScore ?? "";
@@ -577,6 +600,15 @@ function renderGame(game: Game) {
                 ${renderTeamLink(game.awayTeamId, game.awayTeam)}
               </strong>
             </div>`
+          : showLiveScore
+            ? `<div class="live-score" aria-label="Live score">
+              <span>${liveStatus.statusName}</span>
+              <strong>
+                ${renderTeamLink(game.homeTeamId, game.homeTeam)}
+                ${liveStatus.homeScore}-${liveStatus.awayScore}
+                ${renderTeamLink(game.awayTeamId, game.awayTeam)}
+              </strong>
+            </div>`
           : ""
       }
       <div class="prediction-grid">
@@ -603,7 +635,15 @@ function renderGame(game: Game) {
           : ""
       }
       <div class="game-actions">
-        <span>${isFinal ? "Final score posted" : savedLabel ? `Saved ${savedLabel}` : "Not saved"}</span>
+        <span>${
+          isFinal
+            ? "Final score posted"
+            : showLiveScore
+              ? "Match in progress"
+              : savedLabel
+                ? `Saved ${savedLabel}`
+                : "Not saved"
+        }</span>
         <button class="save-button" data-game-id="${game.id}" type="button" ${closed ? "disabled" : ""}>
           ${isFinal ? "Locked" : "Save"}
         </button>
@@ -1001,3 +1041,9 @@ render();
 if (canUseStoredCredentials() && canUseEmailLocally(state.email ?? "")) {
   fetchPredictions(state.email!);
 }
+
+window.setInterval(() => {
+  if (canUseStoredCredentials() && canUseEmailLocally(state.email ?? "")) {
+    fetchPredictions(state.email!, { silent: true });
+  }
+}, scoreRefreshMs);

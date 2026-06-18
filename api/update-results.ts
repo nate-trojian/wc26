@@ -1,7 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { espnEventIds } from "../src/data/espnEvents.js";
 import { gameSets } from "../src/data/games.js";
-import type { Game, GameResult } from "../src/types.js";
+import type { Game, GameResult, MatchStatus, MatchStatusState } from "../src/types.js";
+import {
+  readMatchStatuses,
+  saveMatchStatuses,
+} from "./matchStatusStore.js";
 import {
   readResults,
   resultStorageErrorMessage,
@@ -44,9 +48,9 @@ type EspnScoreboardResponse = {
   events?: EspnEvent[];
 };
 
-const defaultPollDelayMinutes = 150;
-const catchupWindowHours = 48;
 const defaultProbeLimit = 3;
+const livePollBeforeMinutes = 15;
+const livePollAfterMinutes = 180;
 
 const teamAliases: Record<string, string> = {
   bosniaherzegovina: "bosniaandherzegovina",
@@ -113,15 +117,12 @@ function sameTeam(left: string, right: string) {
   return normalizeTeamName(left) === normalizeTeamName(right);
 }
 
-function dueGames(now: Date, existingResults: readonly GameResult[]) {
+function liveGames(now: Date, existingResults: readonly GameResult[]) {
   const existingGameIds = new Set(
     existingResults.map((result) => result.gameId),
   );
-  const pollDelayMs =
-    Number(process.env.RESULT_POLL_DELAY_MINUTES ?? defaultPollDelayMinutes) *
-    60 *
-    1000;
-  const catchupWindowMs = catchupWindowHours * 60 * 60 * 1000;
+  const livePollBeforeMs = livePollBeforeMinutes * 60 * 1000;
+  const livePollAfterMs = livePollAfterMinutes * 60 * 1000;
 
   return gameSets
     .flatMap((set) => set.games)
@@ -136,7 +137,7 @@ function dueGames(now: Date, existingResults: readonly GameResult[]) {
       }
 
       const elapsedMs = now.getTime() - kickoff.getTime();
-      return elapsedMs >= pollDelayMs && elapsedMs <= catchupWindowMs;
+      return elapsedMs >= -livePollBeforeMs && elapsedMs <= livePollAfterMs;
     });
 }
 
@@ -238,6 +239,28 @@ function resultFromEvent(game: Game, event: EspnEvent): GameResult | null {
   };
 }
 
+function statusStateFromEvent(event: EspnEvent): MatchStatusState {
+  const state = event.competitions[0]?.status.type.state;
+  return state === "in" || state === "post" ? state : "pre";
+}
+
+function matchStatusFromEvent(game: Game, event: EspnEvent, lastUpdatedAt: string): MatchStatus {
+  const { competition, home, away } = competitorsForEvent(event);
+  const homeScore = Number(home?.score);
+  const awayScore = Number(away?.score);
+
+  return {
+    gameId: game.id,
+    state: statusStateFromEvent(event),
+    statusName: competition?.status.type.name ?? "Unknown",
+    completed: competition?.status.type.completed ?? false,
+    homeScore: Number.isInteger(homeScore) ? homeScore : null,
+    awayScore: Number.isInteger(awayScore) ? awayScore : null,
+    lastUpdatedAt,
+    providerEventId: event.id,
+  };
+}
+
 async function fetchEvents(games: readonly Game[]) {
   const timezone = process.env.ESPN_TIMEZONE ?? "America/New_York";
   const host = process.env.ESPN_SCOREBOARD_HOST ?? "site.api.espn.com";
@@ -289,6 +312,7 @@ export default async function handler(
   try {
     const existingResults = await readResults();
     const now = new Date();
+    const lastUpdatedAt = now.toISOString();
     const probe = request.query.probe === "true";
     const probeLimit =
       typeof request.query.limit === "string"
@@ -302,7 +326,7 @@ export default async function handler(
         : defaultProbeLimit;
     const games = probe
       ? probeGames(now, existingResults, probeLimit)
-      : dueGames(now, existingResults);
+      : liveGames(now, existingResults);
     if (games.length === 0) {
       return response
         .status(200)
@@ -344,6 +368,16 @@ export default async function handler(
       });
     }
 
+    const statusUpdates = games.flatMap((game) => {
+      const event = findEventForGame(game, events);
+      return event ? [matchStatusFromEvent(game, event, lastUpdatedAt)] : [];
+    });
+
+    if (statusUpdates.length > 0) {
+      const existingStatuses = await readMatchStatuses();
+      await saveMatchStatuses([...existingStatuses, ...statusUpdates]);
+    }
+
     const newResults = games.flatMap((game) => {
       const event = findEventForGame(game, events);
       const result = event ? resultFromEvent(game, event) : null;
@@ -356,6 +390,7 @@ export default async function handler(
 
     response.status(200).json({
       checked: games.length,
+      statusesSaved: statusUpdates.length,
       saved: newResults.length,
       resultsCount: existingResults.length + newResults.length,
       savedGameIds: newResults.map((result) => result.gameId),

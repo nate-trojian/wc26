@@ -37,6 +37,19 @@ export type GameResult = {
   awayScore: number;
 };
 
+export type MatchStatusState = "pre" | "in" | "post";
+
+export type MatchStatus = {
+  gameId: string;
+  state: MatchStatusState;
+  statusName: string;
+  completed: boolean;
+  homeScore: number | null;
+  awayScore: number | null;
+  lastUpdatedAt: string;
+  providerEventId?: string;
+};
+
 export type LeaderboardEntry = {
   email: string;
   name: string;
