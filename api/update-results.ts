@@ -247,6 +247,7 @@ function statusStateFromEvent(event: EspnEvent): MatchStatusState {
 
 function readableStatusName(statusName: string | null | undefined) {
   const statusLabels: Record<string, string> = {
+    STATUS_IN_PROGRESS: "Live",
     STATUS_FIRST_HALF: "1H",
     STATUS_HALFTIME: "HT",
     STATUS_SECOND_HALF: "2H",

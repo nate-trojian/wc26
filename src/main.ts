@@ -137,6 +137,7 @@ function matchStatusForGame(gameId: string): MatchStatus | undefined {
 
 function readableStatusName(statusName: string) {
   const statusLabels: Record<string, string> = {
+    STATUS_IN_PROGRESS: "Live",
     STATUS_FIRST_HALF: "1H",
     STATUS_HALFTIME: "HT",
     STATUS_SECOND_HALF: "2H",
