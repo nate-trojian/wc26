@@ -7,4 +7,14 @@ export const matchResults: readonly GameResult[] = [
     homeScore: 0,
     awayScore: 1,
   },
+  {
+    gameId: "g42",
+    homeScore: 3,
+    awayScore: 0,
+  },
+  {
+    gameId: "g43",
+    homeScore: 3,
+    awayScore: 2,
+  },
 ];
