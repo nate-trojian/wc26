@@ -50,6 +50,7 @@ type EspnScoreboardResponse = {
 };
 
 const defaultProbeLimit = 3;
+const defaultProbeUnknownGameDays = 14;
 const livePollBeforeMinutes = 15;
 const livePollAfterMinutes = 180;
 
@@ -118,6 +119,10 @@ function sameTeam(left: string, right: string) {
   return normalizeTeamName(left) === normalizeTeamName(right);
 }
 
+function allKnownGames() {
+  return gameSets.flatMap((set) => set.games);
+}
+
 function liveGames(now: Date, existingResults: readonly GameResult[]) {
   const existingGameIds = new Set(
     existingResults.map((result) => result.gameId),
@@ -125,8 +130,7 @@ function liveGames(now: Date, existingResults: readonly GameResult[]) {
   const livePollBeforeMs = livePollBeforeMinutes * 60 * 1000;
   const livePollAfterMs = livePollAfterMinutes * 60 * 1000;
 
-  return gameSets
-    .flatMap((set) => set.games)
+  return allKnownGames()
     .filter((game) => {
       if (existingGameIds.has(game.id)) {
         return false;
@@ -151,8 +155,7 @@ function probeGames(
     existingResults.map((result) => result.gameId),
   );
 
-  return gameSets
-    .flatMap((set) => set.games)
+  return allKnownGames()
     .filter((game) => {
       if (existingGameIds.has(game.id)) {
         return false;
@@ -181,6 +184,63 @@ function competitorsForEvent(event: EspnEvent) {
   );
 
   return { competition, home, away };
+}
+
+function eventTeamNames(event: EspnEvent) {
+  const { home, away } = competitorsForEvent(event);
+  return [home?.team.displayName, away?.team.displayName].filter(
+    (teamName): teamName is string => Boolean(teamName),
+  );
+}
+
+function isStoredFixtureEvent(
+  event: EspnEvent,
+  games: readonly Game[],
+  timeZone: string,
+) {
+  if (new Set(Object.values(espnEventIds)).has(event.id)) {
+    return true;
+  }
+
+  const { home, away } = competitorsForEvent(event);
+  if (!home || !away) {
+    return false;
+  }
+
+  const eventKickoff = parseGameDate(event.competitions[0]?.date ?? event.date);
+  if (Number.isNaN(eventKickoff.getTime())) {
+    return false;
+  }
+
+  const eventDateKey = espnDateKey(eventKickoff, timeZone);
+  return games.some((game) => {
+    const gameKickoff = parseGameDate(game.dateTime);
+    if (
+      Number.isNaN(gameKickoff.getTime()) ||
+      espnDateKey(gameKickoff, timeZone) !== eventDateKey
+    ) {
+      return false;
+    }
+
+    return (
+      (sameTeam(game.homeTeam, home.team.displayName) &&
+        sameTeam(game.awayTeam, away.team.displayName)) ||
+      (sameTeam(game.homeTeam, away.team.displayName) &&
+        sameTeam(game.awayTeam, home.team.displayName))
+    );
+  });
+}
+
+function summarizeOtherTeamMatch(
+  event: EspnEvent,
+  knownTeamNames: ReadonlySet<string>,
+) {
+  return {
+    ...summarizeEvent(event),
+    matchedTeams: eventTeamNames(event).filter((teamName) =>
+      knownTeamNames.has(normalizeTeamName(teamName)),
+    ),
+  };
 }
 
 function findEventForGame(game: Game, events: readonly EspnEvent[]) {
@@ -277,14 +337,30 @@ function matchStatusFromEvent(game: Game, event: EspnEvent, lastUpdatedAt: strin
   };
 }
 
-async function fetchEvents(games: readonly Game[]) {
-  const timezone = process.env.ESPN_TIMEZONE ?? "America/New_York";
-  const host = process.env.ESPN_SCOREBOARD_HOST ?? "site.api.espn.com";
-  const dates = Array.from(
+function dateKeysForGames(games: readonly Game[], timeZone: string) {
+  return Array.from(
     new Set(
-      games.map((game) => espnDateKey(parseGameDate(game.dateTime), timezone)),
+      games.map((game) => espnDateKey(parseGameDate(game.dateTime), timeZone)),
     ),
   );
+}
+
+function probeDateKeys(
+  now: Date,
+  games: readonly Game[],
+  timeZone: string,
+) {
+  const dates = new Set(dateKeysForGames(games, timeZone));
+  for (let offset = 0; offset < defaultProbeUnknownGameDays; offset += 1) {
+    const date = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
+    dates.add(espnDateKey(date, timeZone));
+  }
+
+  return Array.from(dates).sort();
+}
+
+async function fetchEventsForDateKeys(dates: readonly string[]) {
+  const host = process.env.ESPN_SCOREBOARD_HOST ?? "site.api.espn.com";
   const responses = await Promise.all(
     dates.map(async (date) => {
       const url = new URL(
@@ -330,6 +406,7 @@ export default async function handler(
     const now = new Date();
     const lastUpdatedAt = now.toISOString();
     const probe = request.query.probe === "true";
+    const includeUnknownGames = request.query.includeUnknownGames === "true";
     const probeLimit =
       typeof request.query.limit === "string"
         ? Math.max(
@@ -343,7 +420,7 @@ export default async function handler(
     const games = probe
       ? probeGames(now, existingResults, probeLimit)
       : liveGames(now, existingResults);
-    if (games.length === 0) {
+    if (!probe && games.length === 0) {
       return response
         .status(200)
         .json({
@@ -354,14 +431,44 @@ export default async function handler(
         });
     }
 
-    const events = await fetchEvents(games);
+    const timezone = process.env.ESPN_TIMEZONE ?? "America/New_York";
+    const dateKeys =
+      probe && includeUnknownGames
+        ? probeDateKeys(now, games, timezone)
+        : dateKeysForGames(games, timezone);
+    const events = await fetchEventsForDateKeys(dateKeys);
     if (probe) {
+      const knownGames = allKnownGames();
+      const knownTeamNames = new Set(
+        knownGames.flatMap((game) => [
+          normalizeTeamName(game.homeTeam),
+          normalizeTeamName(game.awayTeam),
+        ]),
+      );
+      const otherTeamMatches = includeUnknownGames
+        ? events
+            .filter((event) => {
+              const matchesKnownTeam = eventTeamNames(event).some((teamName) =>
+                knownTeamNames.has(normalizeTeamName(teamName)),
+              );
+
+              return (
+                matchesKnownTeam &&
+                !isStoredFixtureEvent(event, knownGames, timezone)
+              );
+            })
+            .map((event) => summarizeOtherTeamMatch(event, knownTeamNames))
+        : undefined;
+
       return response.status(200).json({
         probe: true,
+        includeUnknownGames,
         checked: games.length,
+        dateKeys,
         saved: 0,
         resultsCount: existingResults.length,
         candidateEvents: events.map(summarizeEvent),
+        ...(otherTeamMatches ? { otherTeamMatches } : {}),
         fixtureChecks: games.map((game) => {
           const event = findEventForGame(game, events);
 
