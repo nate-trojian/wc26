@@ -7,6 +7,7 @@ import { matchResults as seedMatchResults } from "./data/results.js";
 import { teamEspnLinks } from "./data/teamLinks.js";
 import { buildLeaderboard } from "./scoring.js";
 import type {
+  EndingPhase,
   Game,
   GameResult,
   GameSet,
@@ -14,6 +15,7 @@ import type {
   LeaderboardEntry,
   MatchStatus,
   Participant,
+  Prediction,
   PredictionMatrixPayload,
   PredictionsByEmail,
   PredictionsByGame,
@@ -31,6 +33,16 @@ const validateEmailsLocally = import.meta.env.DEV;
 const requireAccessToken = !import.meta.env.DEV;
 
 type ActiveView = "predictions" | "leaderboard" | "predictionMatrix";
+const endingPhaseLabels: Record<EndingPhase, string> = {
+  regular: "Regular time",
+  extra: "Extra time",
+  pks: "PKs",
+};
+const endingPhaseControlLabels: Record<EndingPhase, string> = {
+  regular: "Reg",
+  extra: "ET",
+  pks: "PKs",
+};
 
 type AppState = {
   email: string | null;
@@ -158,6 +170,10 @@ function scoreOutcome(homeScore: number, awayScore: number) {
   return Math.sign(homeScore - awayScore);
 }
 
+function isKnockoutGame(game: Game) {
+  return Boolean(gameSetForGame(game)?.isKnockout);
+}
+
 function outcomeLabel(game: Game, homeScore: number, awayScore: number) {
   const outcome = scoreOutcome(homeScore, awayScore);
   if (outcome > 0) {
@@ -171,12 +187,81 @@ function outcomeLabel(game: Game, homeScore: number, awayScore: number) {
   return "Draw";
 }
 
-function pointsEarned(
-  prediction: { homeScore: number; awayScore: number } | undefined,
-  result: GameResult | undefined,
-) {
+function resultWinningTeamId(game: Game, result: GameResult) {
+  if (result.winningTeamId) {
+    return result.winningTeamId;
+  }
+
+  if (result.homeScore > result.awayScore) {
+    return game.homeTeamId;
+  }
+
+  if (result.awayScore > result.homeScore) {
+    return game.awayTeamId;
+  }
+
+  return undefined;
+}
+
+function selectedTeamScoreForResult(game: Game, result: GameResult, teamId: number) {
+  if (teamId === game.homeTeamId) {
+    return result.homeScore;
+  }
+
+  if (teamId === game.awayTeamId) {
+    return result.awayScore;
+  }
+
+  return undefined;
+}
+
+function teamNameForId(game: Game, teamId: number | undefined) {
+  if (teamId === game.homeTeamId) {
+    return game.homeTeam;
+  }
+
+  if (teamId === game.awayTeamId) {
+    return game.awayTeam;
+  }
+
+  return "";
+}
+
+function knockoutPredictionLabel(game: Game, prediction: Prediction | undefined) {
+  if (!prediction?.winningTeamId || prediction.selectedTeamScore === undefined || !prediction.endingPhase) {
+    return "";
+  }
+
+  return `${teamNameForId(game, prediction.winningTeamId)} ${prediction.selectedTeamScore}, ${endingPhaseLabels[prediction.endingPhase]}`;
+}
+
+function knockoutOutcomeClass(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
+  if (!prediction?.winningTeamId || !result) {
+    return "";
+  }
+
+  return prediction.winningTeamId === resultWinningTeamId(game, result) ? "outcome-correct" : "outcome-wrong";
+}
+
+function pointsEarned(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
   if (!prediction || !result) {
     return 0;
+  }
+
+  if (isKnockoutGame(game)) {
+    if (!prediction.winningTeamId || prediction.selectedTeamScore === undefined || !prediction.endingPhase) {
+      return 0;
+    }
+
+    const winnerExact = prediction.winningTeamId === resultWinningTeamId(game, result) ? 1 : 0;
+    const selectedScore = selectedTeamScoreForResult(game, result, prediction.winningTeamId);
+    const scoreExact = selectedScore === prediction.selectedTeamScore ? 1 : 0;
+    const phaseExact =
+      result.endingPhase && prediction.endingPhase === result.endingPhase && (winnerExact || prediction.endingPhase === "pks")
+        ? 1
+        : 0;
+
+    return winnerExact * 2 + scoreExact + phaseExact;
   }
 
   const homeExact = prediction.homeScore === result.homeScore ? 1 : 0;
@@ -470,11 +555,31 @@ async function savePrediction(game: Game) {
 
   const homeInput = document.querySelector<HTMLInputElement>(`#${game.id}-home`);
   const awayInput = document.querySelector<HTMLInputElement>(`#${game.id}-away`);
-  const homeScore = Number(homeInput?.value);
-  const awayScore = Number(awayInput?.value);
+  const knockout = isKnockoutGame(game);
+  const winnerInput = document.querySelector<HTMLInputElement>(`#${game.id}-winner`);
+  const selectedScoreInput = document.querySelector<HTMLInputElement>(`#${game.id}-selected-score`);
+  const phaseInput = document.querySelector<HTMLInputElement>(`input[name="${game.id}-ending-phase"]:checked`);
+  const winningTeamId = Number(winnerInput?.value);
+  const selectedTeamScore = Number(selectedScoreInput?.value);
+  const endingPhase = phaseInput?.value as EndingPhase | undefined;
+  const homeScore = knockout && winningTeamId === game.homeTeamId ? selectedTeamScore : Number(homeInput?.value);
+  const awayScore = knockout && winningTeamId === game.awayTeamId ? selectedTeamScore : Number(awayInput?.value);
 
   if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore) || homeScore < 0 || awayScore < 0) {
     setMessage("Use whole-number scores.", game.id, anchorTop);
+    return;
+  }
+
+  if (
+    knockout &&
+    (winningTeamId !== game.homeTeamId &&
+      winningTeamId !== game.awayTeamId ||
+      !Number.isInteger(selectedTeamScore) ||
+      selectedTeamScore < 0 ||
+      !endingPhase ||
+      !Object.keys(endingPhaseLabels).includes(endingPhase))
+  ) {
+    setMessage("Pick a winner, that team's score, and the ending phase.", game.id, anchorTop);
     return;
   }
 
@@ -487,6 +592,13 @@ async function savePrediction(game: Game) {
       [game.id]: {
         homeScore,
         awayScore,
+        ...(knockout
+          ? {
+              winningTeamId,
+              selectedTeamScore,
+              endingPhase,
+            }
+          : {}),
         updatedAt: new Date().toISOString(),
       },
     };
@@ -507,6 +619,13 @@ async function savePrediction(game: Game) {
           gameId: game.id,
           homeScore,
           awayScore,
+          ...(knockout
+            ? {
+                winningTeamId,
+                selectedTeamScore,
+                endingPhase,
+              }
+            : {}),
         },
       }),
     });
@@ -615,6 +734,7 @@ function renderGame(game: Game) {
   const gameSet = gameSetForGame(game);
   const result = resultForGame(game.id);
   const liveStatus = matchStatusForGame(game.id);
+  const knockout = isKnockoutGame(game);
   const showLiveScore =
     !result &&
     liveStatus?.state === "in" &&
@@ -624,18 +744,28 @@ function renderGame(game: Game) {
   const closed = isFinal || (gameSet ? sectionIsClosed(gameSet) : false);
   const homeValue = prediction?.homeScore ?? "";
   const awayValue = prediction?.awayScore ?? "";
+  const selectedScoreValue = prediction?.selectedTeamScore ?? "";
+  const winnerValue = prediction?.winningTeamId ?? "";
+  const endingPhaseValue = prediction?.endingPhase ?? "regular";
   const homeResultClass =
     result && prediction ? (prediction.homeScore === result.homeScore ? "score-correct" : "score-wrong") : "";
   const awayResultClass =
     result && prediction ? (prediction.awayScore === result.awayScore ? "score-correct" : "score-wrong") : "";
-  const predictedOutcome = prediction ? outcomeLabel(game, prediction.homeScore, prediction.awayScore) : "";
+  const predictedOutcome = knockout
+    ? knockoutPredictionLabel(game, prediction)
+    : prediction
+      ? outcomeLabel(game, prediction.homeScore, prediction.awayScore)
+      : "";
   const outcomeResultClass =
-    result && prediction
+    knockout
+      ? knockoutOutcomeClass(game, prediction, result)
+      : result && prediction
       ? scoreOutcome(prediction.homeScore, prediction.awayScore) === scoreOutcome(result.homeScore, result.awayScore)
         ? "outcome-correct"
         : "outcome-wrong"
       : "";
-  const earnedPoints = pointsEarned(prediction, result);
+  const earnedPoints = pointsEarned(game, prediction, result);
+  const maxPoints = knockout ? 4 : 3;
   const savedLabel = prediction
     ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(prediction.updatedAt))
     : "";
@@ -667,26 +797,60 @@ function renderGame(game: Game) {
             </div>`
           : ""
       }
-      <div class="prediction-grid">
-        <div class="team-score">
-          ${renderTeamLink(game.homeTeamId, game.homeTeam)}
-          <input class="${homeResultClass}" id="${game.id}-home" inputmode="numeric" type="number" min="0" max="99" value="${homeValue}" aria-label="${game.homeTeam} score" ${closed ? "disabled" : ""} />
-        </div>
-        <span class="versus">vs</span>
-        <div class="team-score">
-          ${renderTeamLink(game.awayTeamId, game.awayTeam)}
-          <input class="${awayResultClass}" id="${game.id}-away" inputmode="numeric" type="number" min="0" max="99" value="${awayValue}" aria-label="${game.awayTeam} score" ${closed ? "disabled" : ""} />
-        </div>
-      </div>
+      ${
+        knockout
+          ? `<div class="knockout-prediction-grid">
+              <label>
+                <span>Winner</span>
+                <div class="winner-button-group" role="group" aria-label="Winning team">
+                  <button class="${winnerValue === game.homeTeamId ? "selected" : ""}" type="button" data-winner-team-id="${game.homeTeamId}" data-winner-game-id="${game.id}" ${closed ? "disabled" : ""}>${game.homeTeam}</button>
+                  <button class="${winnerValue === game.awayTeamId ? "selected" : ""}" type="button" data-winner-team-id="${game.awayTeamId}" data-winner-game-id="${game.id}" ${closed ? "disabled" : ""}>${game.awayTeam}</button>
+                </div>
+                <input id="${game.id}-winner" type="hidden" value="${winnerValue}" />
+              </label>
+              <label>
+                <span>Score</span>
+                <input id="${game.id}-selected-score" inputmode="numeric" type="number" min="0" max="99" value="${selectedScoreValue}" aria-label="Selected team's score" ${closed ? "disabled" : ""} />
+              </label>
+              <div class="ending-phase-group" role="radiogroup" aria-label="Ending phase">
+                <span>End</span>
+                <div>
+                  ${Object.entries(endingPhaseControlLabels)
+                    .map(
+                      ([phase, label]) => `
+                        <label>
+                          <input type="radio" name="${game.id}-ending-phase" value="${phase}" ${endingPhaseValue === phase ? "checked" : ""} ${closed ? "disabled" : ""} />
+                          <span>${label}</span>
+                        </label>
+                      `,
+                    )
+                    .join("")}
+                </div>
+              </div>
+            </div>
+            <input id="${game.id}-home" type="hidden" value="${homeValue}" />
+            <input id="${game.id}-away" type="hidden" value="${awayValue}" />`
+          : `<div class="prediction-grid">
+              <div class="team-score">
+                ${renderTeamLink(game.homeTeamId, game.homeTeam)}
+                <input class="${homeResultClass}" id="${game.id}-home" inputmode="numeric" type="number" min="0" max="99" value="${homeValue}" aria-label="${game.homeTeam} score" ${closed ? "disabled" : ""} />
+              </div>
+              <span class="versus">vs</span>
+              <div class="team-score">
+                ${renderTeamLink(game.awayTeamId, game.awayTeam)}
+                <input class="${awayResultClass}" id="${game.id}-away" inputmode="numeric" type="number" min="0" max="99" value="${awayValue}" aria-label="${game.awayTeam} score" ${closed ? "disabled" : ""} />
+              </div>
+            </div>`
+      }
       <div id="${game.id}-outcome" class="predicted-outcome ${outcomeResultClass}">
-        <span>Predicted outcome</span>
+        <span>${knockout ? "Knockout pick" : "Predicted outcome"}</span>
         <strong>${predictedOutcome || "Not predicted"}</strong>
       </div>
       ${
         result
           ? `<div class="points-earned">
               <span>Points earned</span>
-              <strong>${earnedPoints}/3</strong>
+              <strong>${earnedPoints}/${maxPoints}</strong>
             </div>`
           : ""
       }
@@ -709,8 +873,6 @@ function renderGame(game: Game) {
 }
 
 function updatePredictedOutcome(game: Game) {
-  const homeScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-home`));
-  const awayScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-away`));
   const outcome = document.querySelector<HTMLDivElement>(`#${game.id}-outcome`);
   const outcomeValue = outcome?.querySelector("strong");
 
@@ -719,6 +881,35 @@ function updatePredictedOutcome(game: Game) {
   }
 
   outcome.classList.remove("outcome-correct", "outcome-wrong");
+
+  if (isKnockoutGame(game)) {
+    const winnerInput = document.querySelector<HTMLInputElement>(`#${game.id}-winner`);
+    const selectedScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-selected-score`));
+    const endingPhase = document.querySelector<HTMLInputElement>(`input[name="${game.id}-ending-phase"]:checked`)?.value as
+      | EndingPhase
+      | undefined;
+    const winningTeamId = Number(winnerInput?.value);
+
+    if (
+      (winningTeamId !== game.homeTeamId && winningTeamId !== game.awayTeamId) ||
+      selectedScore === null ||
+      !endingPhase
+    ) {
+      outcomeValue.textContent = "Not predicted";
+      return;
+    }
+
+    outcomeValue.textContent = `${teamNameForId(game, winningTeamId)} ${selectedScore}, ${endingPhaseLabels[endingPhase]}`;
+
+    const result = resultForGame(game.id);
+    if (result) {
+      outcome.classList.add(winningTeamId === resultWinningTeamId(game, result) ? "outcome-correct" : "outcome-wrong");
+    }
+    return;
+  }
+
+  const homeScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-home`));
+  const awayScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-away`));
 
   if (homeScore === null || awayScore === null) {
     outcomeValue.textContent = "Not predicted";
@@ -876,6 +1067,19 @@ function renderPredictionCell(
 
   if (!prediction) {
     return `<td class="prediction-matrix-cell empty">-</td>`;
+  }
+
+  if (isKnockoutGame(game)) {
+    return `
+      <td class="prediction-matrix-cell ${knockoutOutcomeClass(game, prediction, result)}">
+        <span class="knockout-pick-cell">
+          <strong>${teamNameForId(game, prediction.winningTeamId) || "TBD"}</strong>
+          <span>${prediction.selectedTeamScore ?? "-"} · ${
+            prediction.endingPhase ? endingPhaseLabels[prediction.endingPhase] : "TBD"
+          }</span>
+        </span>
+      </td>
+    `;
   }
 
   const homeClass = result ? scorePartClass(prediction.homeScore, result.homeScore) : "";
@@ -1071,6 +1275,32 @@ function renderDashboard() {
     }
   });
   activeSet.games.forEach((game) => {
+    if (isKnockoutGame(game)) {
+      document.querySelectorAll<HTMLButtonElement>(`[data-winner-game-id="${game.id}"][data-winner-team-id]`).forEach((button) => {
+        button.addEventListener("click", () => {
+          const winnerInput = document.querySelector<HTMLInputElement>(`#${game.id}-winner`);
+          if (winnerInput) {
+            winnerInput.value = button.dataset.winnerTeamId ?? "";
+          }
+          document
+            .querySelectorAll<HTMLButtonElement>(`[data-winner-game-id="${game.id}"][data-winner-team-id]`)
+            .forEach((winnerButton) => {
+              winnerButton.classList.toggle("selected", winnerButton === button);
+            });
+          updatePredictedOutcome(game);
+        });
+      });
+      document.querySelector<HTMLInputElement>(`#${game.id}-selected-score`)?.addEventListener("input", () => {
+        updatePredictedOutcome(game);
+      });
+      document.querySelectorAll<HTMLInputElement>(`input[name="${game.id}-ending-phase"]`).forEach((radio) => {
+        radio.addEventListener("change", () => {
+          updatePredictedOutcome(game);
+        });
+      });
+      return;
+    }
+
     document.querySelector<HTMLInputElement>(`#${game.id}-home`)?.addEventListener("input", () => {
       updatePredictedOutcome(game);
     });

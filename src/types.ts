@@ -17,9 +17,14 @@ export type GameSet = {
   games: Game[];
 };
 
+export type EndingPhase = "regular" | "extra" | "pks";
+
 export type Prediction = {
   homeScore: number;
   awayScore: number;
+  winningTeamId?: number;
+  selectedTeamScore?: number;
+  endingPhase?: EndingPhase;
   updatedAt: string;
 };
 
@@ -36,6 +41,8 @@ export type GameResult = {
   gameId: string;
   homeScore: number;
   awayScore: number;
+  winningTeamId?: number;
+  endingPhase?: EndingPhase;
 };
 
 export type MatchStatusState = "pre" | "in" | "post";

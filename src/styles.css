@@ -452,6 +452,123 @@ button:disabled {
   width: 100%;
 }
 
+.knockout-prediction-grid {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(70px, 0.65fr) minmax(0, 1fr);
+}
+
+.knockout-prediction-grid > label,
+.ending-phase-group {
+  border-left: 1px solid transparent;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.knockout-prediction-grid > label:nth-child(2),
+.ending-phase-group {
+  border-left-color: #e4e3da;
+  padding-left: 10px;
+}
+
+.knockout-prediction-grid > label > span,
+.ending-phase-group > span {
+  color: #69736d;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.knockout-prediction-grid > label > input,
+.winner-button-group button {
+  background: #f8f7f2;
+  border: 1px solid #d7dbd3;
+  border-radius: 6px;
+  color: #17211b;
+  font-size: 0.92rem;
+  font-weight: 850;
+  height: 48px;
+  min-width: 0;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.winner-button-group {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.winner-button-group button {
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.winner-button-group button.selected {
+  background: #e7f6ec;
+  border-color: #23935c;
+  color: #14613f;
+}
+
+.knockout-prediction-grid > label > input {
+  text-align: center;
+}
+
+.ending-phase-group {
+  grid-template-rows: auto 48px;
+}
+
+.ending-phase-group > div {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ending-phase-group label {
+  align-items: center;
+  background: #f8f7f2;
+  border: 1px solid #d7dbd3;
+  border-radius: 6px;
+  color: #17211b;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.8rem;
+  font-weight: 850;
+  height: 48px;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+.ending-phase-group input {
+  appearance: none;
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.ending-phase-group label:has(input:checked) {
+  background: #e7f6ec;
+  border-color: #23935c;
+  color: #14613f;
+}
+
+.ending-phase-group label:has(input:disabled) {
+  cursor: default;
+}
+
+.ending-phase-group span {
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .versus {
   align-self: center;
   color: #7a837d;
@@ -737,6 +854,22 @@ button:disabled {
   font-size: 0.78rem;
 }
 
+.knockout-pick-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.knockout-pick-cell strong {
+  color: #17211b;
+  font-size: 0.84rem;
+}
+
+.knockout-pick-cell span {
+  color: #69736d;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
 .mobile-picks-status {
   display: none;
 }
@@ -881,6 +1014,34 @@ button:disabled {
   .prediction-grid {
     align-items: stretch;
     gap: 10px;
+  }
+
+  .knockout-prediction-grid {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  }
+
+  .knockout-prediction-grid label:first-child {
+    border-bottom: 1px solid #e4e3da;
+    border-left-color: transparent;
+    grid-column: 1 / -1;
+    padding-bottom: 10px;
+  }
+
+  .knockout-prediction-grid > label:nth-child(2) {
+    border-left-color: transparent;
+    padding-left: 0;
+  }
+
+  .knockout-prediction-grid > label > input,
+  .winner-button-group button,
+  .ending-phase-group label {
+    font-size: 0.86rem;
+    height: 42px;
+  }
+
+  .ending-phase-group {
+    grid-template-rows: auto 42px;
   }
 
   .team-score {

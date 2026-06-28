@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { espnEventIds } from "../src/data/espnEvents.js";
 import { gameSets } from "../src/data/games.js";
-import type { Game, GameResult, MatchStatus, MatchStatusState } from "../src/types.js";
+import type { EndingPhase, Game, GameResult, MatchStatus, MatchStatusState } from "../src/types.js";
 import {
   readMatchStatuses,
   saveMatchStatuses,
@@ -16,6 +16,7 @@ type EspnCompetitor = {
   id: string;
   homeAway: "home" | "away";
   score: string;
+  winner?: boolean;
   team: {
     id: string;
     abbreviation?: string;
@@ -293,11 +294,40 @@ function resultFromEvent(game: Game, event: EspnEvent): GameResult | null {
     return null;
   }
 
+  const endingPhase = endingPhaseFromStatus(competition.status.type.name);
+
   return {
     gameId: game.id,
     homeScore,
     awayScore,
+    winningTeamId: home?.winner
+      ? game.homeTeamId
+      : away?.winner
+        ? game.awayTeamId
+        : homeScore > awayScore
+          ? game.homeTeamId
+          : awayScore > homeScore
+            ? game.awayTeamId
+            : undefined,
+    ...(endingPhase ? { endingPhase } : {}),
   };
+}
+
+function endingPhaseFromStatus(statusName: string | null | undefined): EndingPhase | undefined {
+  const normalized = (statusName ?? "").toLowerCase();
+  if (normalized.includes("pen") || normalized.includes("shootout")) {
+    return "pks";
+  }
+
+  if (normalized.includes("extra")) {
+    return "extra";
+  }
+
+  if (normalized.includes("regular")) {
+    return "regular";
+  }
+
+  return undefined;
 }
 
 function statusStateFromEvent(event: EspnEvent): MatchStatusState {

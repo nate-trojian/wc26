@@ -1,12 +1,13 @@
 import { get, put, type BlobAccessType } from "@vercel/blob";
 import { matchResults } from "../src/data/results.js";
-import type { GameResult } from "../src/types.js";
+import type { EndingPhase, GameResult } from "../src/types.js";
 import { cacheTtlMs, readThroughCache, writeThroughCache } from "./serverCache.js";
 
 const resultStorageUnavailableMessage =
   "Result storage is not configured. Connect a Vercel Blob store for this deployment.";
 const resultCacheTtlMs = cacheTtlMs("RESULTS_CACHE_TTL_MS", 60 * 1000);
 const blobCacheMaxAgeSeconds = Math.max(60, Math.ceil(resultCacheTtlMs / 1000));
+const endingPhases = new Set<EndingPhase>(["regular", "extra", "pks"]);
 
 export class ResultStorageError extends Error {
   constructor(message = resultStorageUnavailableMessage) {
@@ -98,7 +99,10 @@ function validResult(value: unknown): value is GameResult {
     result.homeScore >= 0 &&
     typeof result.awayScore === "number" &&
     Number.isInteger(result.awayScore) &&
-    result.awayScore >= 0
+    result.awayScore >= 0 &&
+    (result.winningTeamId === undefined ||
+      (typeof result.winningTeamId === "number" && Number.isInteger(result.winningTeamId))) &&
+    (result.endingPhase === undefined || endingPhases.has(result.endingPhase))
   );
 }
 

@@ -5,14 +5,21 @@ import { allowlistStorageErrorMessage, isAuthorizedParticipant } from "./partici
 import { predictionStorageErrorMessage, readPredictions, savePredictions } from "./predictionStore.js";
 import { matchStatusStorageErrorMessage, readMatchStatuses } from "./matchStatusStore.js";
 import { readResults, resultStorageErrorMessage } from "./resultStore.js";
+import type { EndingPhase } from "../src/types.js";
 
 type PredictionInput = {
   gameId: string;
   homeScore: number;
   awayScore: number;
+  winningTeamId?: number;
+  selectedTeamScore?: number;
+  endingPhase?: EndingPhase;
 };
 
 const gameIds = new Set(gameSets.flatMap((set) => set.games.map((game) => game.id)));
+const gamesById = new Map(gameSets.flatMap((set) => set.games.map((game) => [game.id, game] as const)));
+const knockoutGameIds = new Set(gameSets.filter((set) => set.isKnockout).flatMap((set) => set.games.map((game) => game.id)));
+const endingPhases = new Set<EndingPhase>(["regular", "extra", "pks"]);
 
 function sendError(response: VercelResponse, status: number, message: string) {
   response.status(status).json({ error: message });
@@ -25,6 +32,10 @@ function accessTokenFromRequest(request: VercelRequest) {
 
 function validScore(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 99;
+}
+
+function validEndingPhase(value: unknown): value is EndingPhase {
+  return typeof value === "string" && endingPhases.has(value as EndingPhase);
 }
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
@@ -83,6 +94,18 @@ export default async function handler(request: VercelRequest, response: VercelRe
       return sendError(response, 400, "Scores must be whole numbers between 0 and 99.");
     }
 
+    const game = gamesById.get(input.gameId);
+    const isKnockout = knockoutGameIds.has(input.gameId);
+    if (
+      isKnockout &&
+      (!game ||
+        (input.winningTeamId !== game.homeTeamId && input.winningTeamId !== game.awayTeamId) ||
+        !validScore(input.selectedTeamScore) ||
+        !validEndingPhase(input.endingPhase))
+    ) {
+      return sendError(response, 400, "Knockout predictions must include a winner, that team's score, and an ending phase.");
+    }
+
     try {
       const finalGameIds = new Set((await readResults()).map((result) => result.gameId));
       if (finalGameIds.has(input.gameId)) {
@@ -93,6 +116,13 @@ export default async function handler(request: VercelRequest, response: VercelRe
       predictions[input.gameId] = {
         homeScore: input.homeScore,
         awayScore: input.awayScore,
+        ...(isKnockout
+          ? {
+              winningTeamId: input.winningTeamId,
+              selectedTeamScore: input.selectedTeamScore,
+              endingPhase: input.endingPhase,
+            }
+          : {}),
         updatedAt: new Date().toISOString(),
       };
 
