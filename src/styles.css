@@ -533,7 +533,7 @@ button:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.ending-phase-group label {
+.ending-phase-group button {
   align-items: center;
   background: #f8f7f2;
   border: 1px solid #d7dbd3;
@@ -545,30 +545,20 @@ button:disabled {
   font-weight: 850;
   height: 48px;
   justify-content: center;
+  min-width: 0;
   padding: 0 6px;
+  text-align: center;
+  width: 100%;
 }
 
-.ending-phase-group input {
-  appearance: none;
-  height: 1px;
-  opacity: 0;
-  position: absolute;
-  width: 1px;
-}
-
-.ending-phase-group label:has(input:checked) {
+.ending-phase-group button.selected {
   background: #e7f6ec;
   border-color: #23935c;
   color: #14613f;
 }
 
-.ending-phase-group label:has(input:disabled) {
-  cursor: default;
-}
-
-.ending-phase-group span {
+.ending-phase-group button {
   overflow: hidden;
-  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1039,7 +1029,7 @@ button:disabled {
 
   .knockout-prediction-grid > label > input,
   .winner-button-group button,
-  .ending-phase-group label {
+  .ending-phase-group button {
     font-size: 0.86rem;
     height: 42px;
   }

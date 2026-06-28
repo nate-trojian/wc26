@@ -768,8 +768,8 @@ export const gameSets = [
         dateTime: "2026-07-02 15:00:00-04",
         homeTeamId: 29,
         homeTeam: "Spain",
-        awayTeamId: 0,
-        awayTeam: "Group J 2nd Place",
+        awayTeamId: 39,
+        awayTeam: "Austria",
       },
       {
         id: "g84",
@@ -786,8 +786,8 @@ export const gameSets = [
         dateTime: "2026-07-02 23:00:00-04",
         homeTeamId: 8,
         homeTeam: "Switzerland",
-        awayTeamId: 0,
-        awayTeam: "Third Place Group E/F/G/I/J",
+        awayTeamId: 38,
+        awayTeam: "Algeria",
       },
       {
         id: "g86",

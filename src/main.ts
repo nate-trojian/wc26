@@ -558,7 +558,7 @@ async function savePrediction(game: Game) {
   const knockout = isKnockoutGame(game);
   const winnerInput = document.querySelector<HTMLInputElement>(`#${game.id}-winner`);
   const selectedScoreInput = document.querySelector<HTMLInputElement>(`#${game.id}-selected-score`);
-  const phaseInput = document.querySelector<HTMLInputElement>(`input[name="${game.id}-ending-phase"]:checked`);
+  const phaseInput = document.querySelector<HTMLInputElement>(`#${game.id}-ending-phase`);
   const winningTeamId = Number(winnerInput?.value);
   const selectedTeamScore = Number(selectedScoreInput?.value);
   const endingPhase = phaseInput?.value as EndingPhase | undefined;
@@ -819,14 +819,12 @@ function renderGame(game: Game) {
                   ${Object.entries(endingPhaseControlLabels)
                     .map(
                       ([phase, label]) => `
-                        <label>
-                          <input type="radio" name="${game.id}-ending-phase" value="${phase}" ${endingPhaseValue === phase ? "checked" : ""} ${closed ? "disabled" : ""} />
-                          <span>${label}</span>
-                        </label>
+                        <button class="${endingPhaseValue === phase ? "selected" : ""}" type="button" data-ending-phase="${phase}" data-ending-phase-game-id="${game.id}" ${closed ? "disabled" : ""}>${label}</button>
                       `,
                     )
                     .join("")}
                 </div>
+                <input id="${game.id}-ending-phase" type="hidden" value="${endingPhaseValue}" />
               </div>
             </div>
             <input id="${game.id}-home" type="hidden" value="${homeValue}" />
@@ -886,9 +884,7 @@ function updatePredictedOutcome(game: Game) {
   if (isKnockoutGame(game)) {
     const winnerInput = document.querySelector<HTMLInputElement>(`#${game.id}-winner`);
     const selectedScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-selected-score`));
-    const endingPhase = document.querySelector<HTMLInputElement>(`input[name="${game.id}-ending-phase"]:checked`)?.value as
-      | EndingPhase
-      | undefined;
+    const endingPhase = document.querySelector<HTMLInputElement>(`#${game.id}-ending-phase`)?.value as EndingPhase | undefined;
     const winningTeamId = Number(winnerInput?.value);
 
     if (
@@ -1294,8 +1290,17 @@ function renderDashboard() {
       document.querySelector<HTMLInputElement>(`#${game.id}-selected-score`)?.addEventListener("input", () => {
         updatePredictedOutcome(game);
       });
-      document.querySelectorAll<HTMLInputElement>(`input[name="${game.id}-ending-phase"]`).forEach((radio) => {
-        radio.addEventListener("change", () => {
+      document.querySelectorAll<HTMLButtonElement>(`[data-ending-phase-game-id="${game.id}"][data-ending-phase]`).forEach((button) => {
+        button.addEventListener("click", () => {
+          const phaseInput = document.querySelector<HTMLInputElement>(`#${game.id}-ending-phase`);
+          if (phaseInput) {
+            phaseInput.value = button.dataset.endingPhase ?? "";
+          }
+          document
+            .querySelectorAll<HTMLButtonElement>(`[data-ending-phase-game-id="${game.id}"][data-ending-phase]`)
+            .forEach((phaseButton) => {
+              phaseButton.classList.toggle("selected", phaseButton === button);
+            });
           updatePredictedOutcome(game);
         });
       });
