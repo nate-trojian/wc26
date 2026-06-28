@@ -781,11 +781,34 @@ button:disabled {
   background: #ffffff;
 }
 
+.prediction-matrix-table tbody tr.prediction-total-row th,
+.prediction-matrix-table tbody tr.prediction-total-row td {
+  background: #17211b;
+  border-bottom: 0;
+  color: #ffffff;
+}
+
+.prediction-matrix-table tbody tr.prediction-total-row th.game-column {
+  background: #17211b;
+}
+
+.prediction-matrix-table tbody tr.prediction-total-row th span {
+  color: #cfd7d1;
+}
+
+.prediction-matrix-table tbody tr.prediction-total-row .final-matrix-cell {
+  color: #cfd7d1;
+}
+
 .prediction-matrix-table .game-column strong {
   color: #17211b;
   display: block;
   font-size: 0.9rem;
   margin-top: 3px;
+}
+
+.prediction-matrix-table tbody tr.prediction-total-row .game-column strong {
+  color: #ffffff;
 }
 
 .final-matrix-cell,
@@ -808,6 +831,10 @@ button:disabled {
 .prediction-matrix-cell.empty {
   color: #9ca49d;
   font-weight: 700;
+}
+
+.total-points-cell {
+  font-size: 1rem;
 }
 
 .score-box-pair {

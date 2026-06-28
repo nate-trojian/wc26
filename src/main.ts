@@ -1093,6 +1093,17 @@ function renderPredictionCell(
   `;
 }
 
+function roundPointsTotal(
+  games: readonly Game[],
+  predictionsByEmail: PredictionsByEmail,
+  participant: Participant,
+) {
+  return games.reduce((total, game) => {
+    const prediction = predictionsByEmail[participant.email]?.[game.id];
+    return total + pointsEarned(game, prediction, resultForGame(game.id));
+  }, 0);
+}
+
 function renderPredictionMatrix(activeSet: GameSet) {
   const matrix = predictionMatrixPayload();
   const matrixParticipants = matrix?.participants ?? [];
@@ -1152,6 +1163,25 @@ function renderPredictionMatrix(activeSet: GameSet) {
                         </tr>
                       `;
                     })
+                    .concat(`
+                      <tr class="prediction-total-row">
+                        <th scope="row" class="game-column">
+                          <strong>Total</strong>
+                          <span>Points</span>
+                        </th>
+                        <td class="final-matrix-cell">-</td>
+                        ${matrixParticipants
+                          .map(
+                            (participant) =>
+                              `<td class="prediction-matrix-cell total-points-cell">${roundPointsTotal(
+                                games,
+                                predictionsByEmail,
+                                participant,
+                              )}</td>`,
+                          )
+                          .join("")}
+                      </tr>
+                    `)
                     .join("")
                 : `<tr><td colspan="${Math.max(2, matrixParticipants.length + 2)}">No picks loaded yet.</td></tr>`
             }
