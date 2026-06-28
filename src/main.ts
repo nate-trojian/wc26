@@ -5,6 +5,13 @@ import { participants } from "./config/participants.js";
 import { gameSets } from "./data/games.js";
 import { matchResults as seedMatchResults } from "./data/results.js";
 import { teamEspnLinks } from "./data/teamLinks.js";
+import {
+  deadlineIsClosed,
+  gamePredictionDeadline,
+  nextPredictionDeadline,
+  parseGameDate,
+  setPredictionDeadline,
+} from "./deadlines.js";
 import { buildLeaderboard } from "./scoring.js";
 import type {
   EndingPhase,
@@ -89,11 +96,6 @@ const state: AppState = {
   message: "",
 };
 
-function parseGameDate(value: string) {
-  const normalized = value.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
-  return new Date(normalized);
-}
-
 function formatGameTime(value: string) {
   const date = parseGameDate(value);
   if (Number.isNaN(date.getTime())) {
@@ -119,20 +121,6 @@ function formatDeadline(date: Date) {
     minute: "2-digit",
     timeZoneName: "short",
   }).format(date);
-}
-
-function sectionDeadline(set: GameSet) {
-  const firstGame = set.games[0];
-  if (!firstGame) {
-    return null;
-  }
-
-  const firstGameDate = parseGameDate(firstGame.dateTime);
-  if (Number.isNaN(firstGameDate.getTime())) {
-    return null;
-  }
-
-  return new Date(firstGameDate.getTime() - 30 * 60 * 1000);
 }
 
 function gameSetForGame(game: Game) {
@@ -294,8 +282,20 @@ function inputScore(input: HTMLInputElement | null) {
 }
 
 function sectionIsClosed(set: GameSet) {
-  const deadline = sectionDeadline(set);
-  return deadline ? Date.now() >= deadline.getTime() : false;
+  return deadlineIsClosed(setPredictionDeadline(set));
+}
+
+function gameIsClosed(game: Game, set: GameSet) {
+  return deadlineIsClosed(gamePredictionDeadline(game, set));
+}
+
+function gameHasUpcomingEarlyLock(game: Game, set: GameSet) {
+  return Boolean(
+    set.isKnockout &&
+      set.games.length > 1 &&
+      set.games[0]?.id === game.id &&
+      !deadlineIsClosed(gamePredictionDeadline(game, set)),
+  );
 }
 
 function gameCardSelector(gameId: string) {
@@ -547,9 +547,9 @@ async function savePrediction(game: Game) {
     return;
   }
 
-  if (gameSet && sectionIsClosed(gameSet)) {
-    const deadline = sectionDeadline(gameSet);
-    setMessage(`${gameSet.name} closed ${deadline ? formatDeadline(deadline) : "before kickoff"}.`, game.id, anchorTop);
+  if (gameSet && gameIsClosed(game, gameSet)) {
+    const deadline = gamePredictionDeadline(game, gameSet);
+    setMessage(`${game.homeTeam} vs ${game.awayTeam} closed ${deadline ? formatDeadline(deadline) : "before kickoff"}.`, game.id, anchorTop);
     return;
   }
 
@@ -741,7 +741,7 @@ function renderGame(game: Game) {
     liveStatus.homeScore !== null &&
     liveStatus.awayScore !== null;
   const isFinal = Boolean(result);
-  const closed = isFinal || (gameSet ? sectionIsClosed(gameSet) : false);
+  const closed = isFinal || (gameSet ? gameIsClosed(game, gameSet) : false);
   const homeValue = prediction?.homeScore ?? "";
   const awayValue = prediction?.awayScore ?? "";
   const selectedScoreValue = prediction?.selectedTeamScore ?? "";
@@ -769,9 +769,10 @@ function renderGame(game: Game) {
   const savedLabel = prediction
     ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(prediction.updatedAt))
     : "";
+  const earlyLockClass = gameSet && gameHasUpcomingEarlyLock(game, gameSet) ? "early-lock" : "";
 
   return `
-    <article class="game-card ${isFinal ? "final" : ""}" data-game-card-id="${game.id}">
+    <article class="game-card ${earlyLockClass} ${isFinal ? "final" : ""}" data-game-card-id="${game.id}">
       <div class="game-meta">
         <span>Match ${game.matchNumber}</span>
         <time>${formatGameTime(game.dateTime)}</time>
@@ -1172,7 +1173,7 @@ function renderDashboard() {
   }
 
   const activeSet = gameSets.find((set) => set.id === state.activeSetId) ?? gameSets[0];
-  const activeDeadline = activeSet ? sectionDeadline(activeSet) : null;
+  const activeDeadline = activeSet ? nextPredictionDeadline(activeSet) : null;
   const activeSetClosed = activeSet ? sectionIsClosed(activeSet) : false;
   const activeSavedCount = activeSet ? completedCount(activeSet.games) : 0;
   const activeGamesCount = activeSet?.games.length ?? 0;

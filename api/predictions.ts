@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { normalizeEmail } from "../src/config/allowedEmails.js";
 import { gameSets } from "../src/data/games.js";
+import { deadlineIsClosed, gamePredictionDeadline } from "../src/deadlines.js";
 import { allowlistStorageErrorMessage, isAuthorizedParticipant } from "./participantStore.js";
 import { predictionStorageErrorMessage, readPredictions, savePredictions } from "./predictionStore.js";
 import { matchStatusStorageErrorMessage, readMatchStatuses } from "./matchStatusStore.js";
@@ -18,6 +19,7 @@ type PredictionInput = {
 
 const gameIds = new Set(gameSets.flatMap((set) => set.games.map((game) => game.id)));
 const gamesById = new Map(gameSets.flatMap((set) => set.games.map((game) => [game.id, game] as const)));
+const gameSetsByGameId = new Map(gameSets.flatMap((set) => set.games.map((game) => [game.id, set] as const)));
 const knockoutGameIds = new Set(gameSets.filter((set) => set.isKnockout).flatMap((set) => set.games.map((game) => game.id)));
 const endingPhases = new Set<EndingPhase>(["regular", "extra", "pks"]);
 
@@ -95,6 +97,7 @@ export default async function handler(request: VercelRequest, response: VercelRe
     }
 
     const game = gamesById.get(input.gameId);
+    const gameSet = gameSetsByGameId.get(input.gameId);
     const isKnockout = knockoutGameIds.has(input.gameId);
     if (
       isKnockout &&
@@ -110,6 +113,10 @@ export default async function handler(request: VercelRequest, response: VercelRe
       const finalGameIds = new Set((await readResults()).map((result) => result.gameId));
       if (finalGameIds.has(input.gameId)) {
         return sendError(response, 403, "This match is final. Predictions are locked.");
+      }
+
+      if (game && gameSet && deadlineIsClosed(gamePredictionDeadline(game, gameSet))) {
+        return sendError(response, 403, "Predictions are locked for this match.");
       }
 
       const predictions = await readPredictions(email);

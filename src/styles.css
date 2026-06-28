@@ -365,6 +365,10 @@ button:disabled {
   border-color: #cbd8cf;
 }
 
+.game-card.early-lock {
+  border-color: #c44f26;
+}
+
 .game-meta {
   gap: 12px;
   justify-content: space-between;
