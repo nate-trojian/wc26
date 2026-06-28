@@ -1,4 +1,4 @@
-export type GameSetId = "first" | "second" | "third";
+export type GameSetId = "first" | "second" | "third" | "knockout";
 
 export type Game = {
   id: string;
@@ -13,6 +13,7 @@ export type Game = {
 export type GameSet = {
   id: GameSetId;
   name: string;
+  isKnockout?: boolean;
   games: Game[];
 };
 
