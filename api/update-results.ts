@@ -315,6 +315,10 @@ function resultFromEvent(game: Game, event: EspnEvent): GameResult | null {
 
 function endingPhaseFromStatus(statusName: string | null | undefined): EndingPhase | undefined {
   const normalized = (statusName ?? "").toLowerCase();
+  if (normalized === "full_time" || normalized === "status_full_time") {
+    return "regular";
+  }
+
   if (normalized.includes("pen") || normalized.includes("shootout")) {
     return "pks";
   }
