@@ -50,6 +50,18 @@ const endingPhaseControlLabels: Record<EndingPhase, string> = {
   extra: "ET",
   pks: "PKs",
 };
+const localVerificationPredictions: PredictionsByEmail = {
+  "you@example.com": {
+    g73: {
+      homeScore: 2,
+      awayScore: 2,
+      winningTeamId: 5,
+      selectedTeamScore: 1,
+      endingPhase: "pks",
+      updatedAt: "2026-06-28T16:55:00.000Z",
+    },
+  },
+};
 
 type AppState = {
   email: string | null;
@@ -221,6 +233,57 @@ function knockoutPredictionLabel(game: Game, prediction: Prediction | undefined)
   }
 
   return `${teamNameForId(game, prediction.winningTeamId)} ${prediction.selectedTeamScore}, ${endingPhaseLabels[prediction.endingPhase]}`;
+}
+
+function knockoutWinnerClass(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
+  if (!prediction?.winningTeamId || !result) {
+    return "";
+  }
+
+  return prediction.winningTeamId === resultWinningTeamId(game, result) ? "score-correct" : "score-wrong";
+}
+
+function knockoutSelectedScoreClass(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
+  if (!prediction?.winningTeamId || prediction.selectedTeamScore === undefined || !result) {
+    return "";
+  }
+
+  return selectedTeamScoreForResult(game, result, prediction.winningTeamId) === prediction.selectedTeamScore
+    ? "score-correct"
+    : "score-wrong";
+}
+
+function knockoutEndingPhaseClass(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
+  if (!prediction?.endingPhase || !result) {
+    return "";
+  }
+
+  const winnerExact = prediction.winningTeamId === resultWinningTeamId(game, result);
+  const phaseExact =
+    result.endingPhase && prediction.endingPhase === result.endingPhase && (winnerExact || prediction.endingPhase === "pks");
+
+  return phaseExact ? "score-correct" : "score-wrong";
+}
+
+function renderKnockoutPredictionSummary(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
+  if (!prediction?.winningTeamId || prediction.selectedTeamScore === undefined || !prediction.endingPhase) {
+    return "Not predicted";
+  }
+
+  return `
+    <span class="knockout-summary">
+      <span class="knockout-summary-part ${knockoutWinnerClass(game, prediction, result)}">${teamNameForId(
+        game,
+        prediction.winningTeamId,
+      )}</span>
+      <span class="knockout-summary-part ${knockoutSelectedScoreClass(game, prediction, result)}">${
+        prediction.selectedTeamScore
+      }</span>
+      <span class="knockout-summary-part ${knockoutEndingPhaseClass(game, prediction, result)}">${
+        endingPhaseLabels[prediction.endingPhase]
+      }</span>
+    </span>
+  `;
 }
 
 function knockoutOutcomeClass(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
@@ -413,9 +476,10 @@ function localPredictionsStorageKey(email: string) {
 function loadLocalPredictions(email: string): PredictionsByGame {
   try {
     const stored = localStorage.getItem(localPredictionsStorageKey(email));
-    return stored ? (JSON.parse(stored) as PredictionsByGame) : {};
+    const seedPredictions = localVerificationPredictions[normalizeEmail(email)] ?? {};
+    return stored ? { ...seedPredictions, ...(JSON.parse(stored) as PredictionsByGame) } : seedPredictions;
   } catch {
-    return {};
+    return localVerificationPredictions[normalizeEmail(email)] ?? {};
   }
 }
 
@@ -747,6 +811,9 @@ function renderGame(game: Game) {
   const selectedScoreValue = prediction?.selectedTeamScore ?? "";
   const winnerValue = prediction?.winningTeamId ?? "";
   const endingPhaseValue = prediction?.endingPhase ?? "regular";
+  const knockoutWinnerResultClass = knockoutWinnerClass(game, prediction, result);
+  const knockoutSelectedScoreResultClass = knockoutSelectedScoreClass(game, prediction, result);
+  const knockoutEndingPhaseResultClass = knockoutEndingPhaseClass(game, prediction, result);
   const homeResultClass =
     result && prediction ? (prediction.homeScore === result.homeScore ? "score-correct" : "score-wrong") : "";
   const awayResultClass =
@@ -758,7 +825,7 @@ function renderGame(game: Game) {
       : "";
   const outcomeResultClass =
     knockout
-      ? knockoutOutcomeClass(game, prediction, result)
+      ? ""
       : result && prediction
       ? scoreOutcome(prediction.homeScore, prediction.awayScore) === scoreOutcome(result.homeScore, result.awayScore)
         ? "outcome-correct"
@@ -804,14 +871,14 @@ function renderGame(game: Game) {
               <label>
                 <span>Winner</span>
                 <div class="winner-button-group" role="group" aria-label="Winning team">
-                  <button class="${winnerValue === game.homeTeamId ? "selected" : ""}" type="button" data-winner-team-id="${game.homeTeamId}" data-winner-game-id="${game.id}" ${closed ? "disabled" : ""}>${game.homeTeam}</button>
-                  <button class="${winnerValue === game.awayTeamId ? "selected" : ""}" type="button" data-winner-team-id="${game.awayTeamId}" data-winner-game-id="${game.id}" ${closed ? "disabled" : ""}>${game.awayTeam}</button>
+                  <button class="${winnerValue === game.homeTeamId ? `selected ${knockoutWinnerResultClass}` : ""}" type="button" data-winner-team-id="${game.homeTeamId}" data-winner-game-id="${game.id}" ${closed ? "disabled" : ""}>${game.homeTeam}</button>
+                  <button class="${winnerValue === game.awayTeamId ? `selected ${knockoutWinnerResultClass}` : ""}" type="button" data-winner-team-id="${game.awayTeamId}" data-winner-game-id="${game.id}" ${closed ? "disabled" : ""}>${game.awayTeam}</button>
                 </div>
                 <input id="${game.id}-winner" type="hidden" value="${winnerValue}" />
               </label>
               <label>
                 <span>Score</span>
-                <input id="${game.id}-selected-score" inputmode="numeric" type="number" min="0" max="99" value="${selectedScoreValue}" aria-label="Selected team's score" ${closed ? "disabled" : ""} />
+                <input class="${knockoutSelectedScoreResultClass}" id="${game.id}-selected-score" inputmode="numeric" type="number" min="0" max="99" value="${selectedScoreValue}" aria-label="Selected team's score" ${closed ? "disabled" : ""} />
               </label>
               <div class="ending-phase-group" role="radiogroup" aria-label="Ending phase">
                 <span>End</span>
@@ -819,7 +886,7 @@ function renderGame(game: Game) {
                   ${Object.entries(endingPhaseControlLabels)
                     .map(
                       ([phase, label]) => `
-                        <button class="${endingPhaseValue === phase ? "selected" : ""}" type="button" data-ending-phase="${phase}" data-ending-phase-game-id="${game.id}" ${closed ? "disabled" : ""}>${label}</button>
+                        <button class="${endingPhaseValue === phase ? `selected ${knockoutEndingPhaseResultClass}` : ""}" type="button" data-ending-phase="${phase}" data-ending-phase-game-id="${game.id}" ${closed ? "disabled" : ""}>${label}</button>
                       `,
                     )
                     .join("")}
@@ -843,7 +910,7 @@ function renderGame(game: Game) {
       }
       <div id="${game.id}-outcome" class="predicted-outcome ${outcomeResultClass}">
         <span>${knockout ? "Knockout pick" : "Predicted outcome"}</span>
-        <strong>${predictedOutcome || "Not predicted"}</strong>
+        <strong>${knockout ? renderKnockoutPredictionSummary(game, prediction, result) : predictedOutcome || "Not predicted"}</strong>
       </div>
       ${
         result
@@ -1067,13 +1134,24 @@ function renderPredictionCell(
   }
 
   if (isKnockoutGame(game)) {
+    const winnerClass = knockoutWinnerClass(game, prediction, result);
+    const selectedScoreClass = knockoutSelectedScoreClass(game, prediction, result);
+    const endingPhaseClass = knockoutEndingPhaseClass(game, prediction, result);
+
     return `
       <td class="prediction-matrix-cell ${knockoutOutcomeClass(game, prediction, result)}">
         <span class="knockout-pick-cell">
-          <strong>${teamNameForId(game, prediction.winningTeamId) || "TBD"}</strong>
-          <span>${prediction.selectedTeamScore ?? "-"} · ${
-            prediction.endingPhase ? endingPhaseLabels[prediction.endingPhase] : "TBD"
-          }</span>
+          <strong class="knockout-summary-part ${winnerClass}">${teamNameForId(
+            game,
+            prediction.winningTeamId,
+          ) || "TBD"}</strong>
+          <span>
+            <span class="knockout-summary-part ${selectedScoreClass}">${prediction.selectedTeamScore ?? "-"}</span>
+            <span class="score-separator">·</span>
+            <span class="knockout-summary-part ${endingPhaseClass}">${
+              prediction.endingPhase ? endingPhaseLabels[prediction.endingPhase] : "TBD"
+            }</span>
+          </span>
         </span>
       </td>
     `;

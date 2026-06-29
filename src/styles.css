@@ -518,6 +518,20 @@ button:disabled {
   color: #14613f;
 }
 
+.winner-button-group button.selected.score-correct,
+.ending-phase-group button.selected.score-correct {
+  background: #e7f6ec;
+  border-color: #23935c;
+  color: #14613f;
+}
+
+.winner-button-group button.selected.score-wrong,
+.ending-phase-group button.selected.score-wrong {
+  background: #fdeae5;
+  border-color: #c44f26;
+  color: #9d3d1b;
+}
+
 .knockout-prediction-grid > label > input {
   text-align: center;
 }
@@ -594,6 +608,43 @@ button:disabled {
   color: #17211b;
   font-size: 0.98rem;
   text-align: right;
+}
+
+.knockout-summary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.predicted-outcome .knockout-summary,
+.predicted-outcome .knockout-summary-part {
+  color: inherit;
+  font-size: inherit;
+  text-transform: none;
+}
+
+.knockout-summary-part {
+  background: #ffffff;
+  border: 1px solid #d9ded8;
+  border-radius: 4px;
+  color: #17211b;
+  display: inline-flex;
+  line-height: 1.1;
+  padding: 4px 7px;
+}
+
+.knockout-summary-part.score-correct {
+  background: #d7f0df;
+  border-color: #23935c;
+  color: #14613f;
+}
+
+.knockout-summary-part.score-wrong {
+  background: #f8d8ce;
+  border-color: #c44f26;
+  color: #9d3d1b;
 }
 
 .predicted-outcome.outcome-correct {
