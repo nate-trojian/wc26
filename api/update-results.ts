@@ -1,11 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { espnEventIds } from "../src/data/espnEvents.js";
 import { gameSets } from "../src/data/games.js";
-import type { EndingPhase, Game, GameResult, MatchStatus, MatchStatusState } from "../src/types.js";
-import {
-  readMatchStatuses,
-  saveMatchStatuses,
-} from "./matchStatusStore.js";
+import type {
+  EndingPhase,
+  Game,
+  GameResult,
+  MatchStatus,
+  MatchStatusState,
+} from "../src/types.js";
+import { readMatchStatuses, saveMatchStatuses } from "./matchStatusStore.js";
 import {
   readResults,
   resultStorageErrorMessage,
@@ -131,20 +134,19 @@ function liveGames(now: Date, existingResults: readonly GameResult[]) {
   const livePollBeforeMs = livePollBeforeMinutes * 60 * 1000;
   const livePollAfterMs = livePollAfterMinutes * 60 * 1000;
 
-  return allKnownGames()
-    .filter((game) => {
-      if (existingGameIds.has(game.id)) {
-        return false;
-      }
+  return allKnownGames().filter((game) => {
+    if (existingGameIds.has(game.id)) {
+      return false;
+    }
 
-      const kickoff = parseGameDate(game.dateTime);
-      if (Number.isNaN(kickoff.getTime())) {
-        return false;
-      }
+    const kickoff = parseGameDate(game.dateTime);
+    if (Number.isNaN(kickoff.getTime())) {
+      return false;
+    }
 
-      const elapsedMs = now.getTime() - kickoff.getTime();
-      return elapsedMs >= -livePollBeforeMs && elapsedMs <= livePollAfterMs;
-    });
+    const elapsedMs = now.getTime() - kickoff.getTime();
+    return elapsedMs >= -livePollBeforeMs && elapsedMs <= livePollAfterMs;
+  });
 }
 
 function probeGames(
@@ -313,7 +315,9 @@ function resultFromEvent(game: Game, event: EspnEvent): GameResult | null {
   };
 }
 
-function endingPhaseFromStatus(statusName: string | null | undefined): EndingPhase | undefined {
+function endingPhaseFromStatus(
+  statusName: string | null | undefined,
+): EndingPhase | undefined {
   const normalized = (statusName ?? "").toLowerCase();
   if (normalized === "full_time" || normalized === "status_full_time") {
     return "regular";
@@ -348,12 +352,23 @@ function readableStatusName(statusName: string | null | undefined) {
     STATUS_FULL_TIME: "FT",
     STATUS_FINAL: "Final",
     STATUS_SCHEDULED: "Scheduled",
+    STATUS_HALFTIME_ET: "HT ET",
+    STATUS_FIRST_HALF_ET: "1H ET",
+    STATUS_SECOND_HALF_ET: "2H ET",
+    STATUS_SHOOTOUT: "PEN",
+    STATUS_OVERTIME: "ET",
+    STATUS_FINAL_PEN: "FT PEN",
+    STATUS_END_OF_EXTRATIME: "PEN",
   };
 
   return statusName ? (statusLabels[statusName] ?? statusName) : "Unknown";
 }
 
-function matchStatusFromEvent(game: Game, event: EspnEvent, lastUpdatedAt: string): MatchStatus {
+function matchStatusFromEvent(
+  game: Game,
+  event: EspnEvent,
+  lastUpdatedAt: string,
+): MatchStatus {
   const { competition, home, away } = competitorsForEvent(event);
   const homeScore = Number(home?.score);
   const awayScore = Number(away?.score);
@@ -379,11 +394,7 @@ function dateKeysForGames(games: readonly Game[], timeZone: string) {
   );
 }
 
-function probeDateKeys(
-  now: Date,
-  games: readonly Game[],
-  timeZone: string,
-) {
+function probeDateKeys(now: Date, games: readonly Game[], timeZone: string) {
   const dates = new Set(dateKeysForGames(games, timeZone));
   for (let offset = 0; offset < defaultProbeUnknownGameDays; offset += 1) {
     const date = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
@@ -455,14 +466,12 @@ export default async function handler(
       ? probeGames(now, existingResults, probeLimit)
       : liveGames(now, existingResults);
     if (!probe && games.length === 0) {
-      return response
-        .status(200)
-        .json({
-          probe,
-          checked: 0,
-          saved: 0,
-          resultsCount: existingResults.length,
-        });
+      return response.status(200).json({
+        probe,
+        checked: 0,
+        saved: 0,
+        resultsCount: existingResults.length,
+      });
     }
 
     const timezone = process.env.ESPN_TIMEZONE ?? "America/New_York";

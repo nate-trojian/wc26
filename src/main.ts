@@ -83,7 +83,12 @@ type AppState = {
 function defaultActiveSetId(now = Date.now()): GameSetId {
   return (
     gameSets
-      .map((set) => ({ id: set.id, startsAt: set.games[0] ? parseGameDate(set.games[0].dateTime).getTime() : NaN }))
+      .map((set) => ({
+        id: set.id,
+        startsAt: set.games[0]
+          ? parseGameDate(set.games[0].dateTime).getTime()
+          : NaN,
+      }))
       .filter(({ startsAt }) => !Number.isNaN(startsAt) && startsAt <= now)
       .sort((a, b) => b.startsAt - a.startsAt)[0]?.id ??
     gameSets[0]?.id ??
@@ -156,6 +161,13 @@ function readableStatusName(statusName: string) {
     STATUS_FULL_TIME: "FT",
     STATUS_FINAL: "Final",
     STATUS_SCHEDULED: "Scheduled",
+    STATUS_HALFTIME_ET: "HT ET",
+    STATUS_FIRST_HALF_ET: "1H ET",
+    STATUS_SECOND_HALF_ET: "2H ET",
+    STATUS_SHOOTOUT: "PEN",
+    STATUS_OVERTIME: "ET",
+    STATUS_FINAL_PEN: "FT PEN",
+    STATUS_END_OF_EXTRATIME: "PEN",
   };
 
   return statusLabels[statusName] ?? statusName;
@@ -163,7 +175,9 @@ function readableStatusName(statusName: string) {
 
 function liveStatusLabel(status: MatchStatus) {
   const statusName = readableStatusName(status.statusName);
-  return status.displayClock ? `${statusName} ${status.displayClock}` : statusName;
+  return status.displayClock
+    ? `${statusName} ${status.displayClock}`
+    : statusName;
 }
 
 function scoreOutcome(homeScore: number, awayScore: number) {
@@ -203,7 +217,11 @@ function resultWinningTeamId(game: Game, result: GameResult) {
   return undefined;
 }
 
-function selectedTeamScoreForResult(game: Game, result: GameResult, teamId: number) {
+function selectedTeamScoreForResult(
+  game: Game,
+  result: GameResult,
+  teamId: number,
+) {
   if (teamId === game.homeTeamId) {
     return result.homeScore;
   }
@@ -227,46 +245,83 @@ function teamNameForId(game: Game, teamId: number | undefined) {
   return "";
 }
 
-function knockoutPredictionLabel(game: Game, prediction: Prediction | undefined) {
-  if (!prediction?.winningTeamId || prediction.selectedTeamScore === undefined || !prediction.endingPhase) {
+function knockoutPredictionLabel(
+  game: Game,
+  prediction: Prediction | undefined,
+) {
+  if (
+    !prediction?.winningTeamId ||
+    prediction.selectedTeamScore === undefined ||
+    !prediction.endingPhase
+  ) {
     return "";
   }
 
   return `${teamNameForId(game, prediction.winningTeamId)} ${prediction.selectedTeamScore}, ${endingPhaseLabels[prediction.endingPhase]}`;
 }
 
-function knockoutWinnerClass(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
+function knockoutWinnerClass(
+  game: Game,
+  prediction: Prediction | undefined,
+  result: GameResult | undefined,
+) {
   if (!prediction?.winningTeamId || !result) {
     return "";
   }
 
-  return prediction.winningTeamId === resultWinningTeamId(game, result) ? "score-correct" : "score-wrong";
-}
-
-function knockoutSelectedScoreClass(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
-  if (!prediction?.winningTeamId || prediction.selectedTeamScore === undefined || !result) {
-    return "";
-  }
-
-  return selectedTeamScoreForResult(game, result, prediction.winningTeamId) === prediction.selectedTeamScore
+  return prediction.winningTeamId === resultWinningTeamId(game, result)
     ? "score-correct"
     : "score-wrong";
 }
 
-function knockoutEndingPhaseClass(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
+function knockoutSelectedScoreClass(
+  game: Game,
+  prediction: Prediction | undefined,
+  result: GameResult | undefined,
+) {
+  if (
+    !prediction?.winningTeamId ||
+    prediction.selectedTeamScore === undefined ||
+    !result
+  ) {
+    return "";
+  }
+
+  return selectedTeamScoreForResult(game, result, prediction.winningTeamId) ===
+    prediction.selectedTeamScore
+    ? "score-correct"
+    : "score-wrong";
+}
+
+function knockoutEndingPhaseClass(
+  game: Game,
+  prediction: Prediction | undefined,
+  result: GameResult | undefined,
+) {
   if (!prediction?.endingPhase || !result) {
     return "";
   }
 
-  const winnerExact = prediction.winningTeamId === resultWinningTeamId(game, result);
+  const winnerExact =
+    prediction.winningTeamId === resultWinningTeamId(game, result);
   const phaseExact =
-    result.endingPhase && prediction.endingPhase === result.endingPhase && (winnerExact || prediction.endingPhase === "pks");
+    result.endingPhase &&
+    prediction.endingPhase === result.endingPhase &&
+    (winnerExact || prediction.endingPhase === "pks");
 
   return phaseExact ? "score-correct" : "score-wrong";
 }
 
-function renderKnockoutPredictionSummary(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
-  if (!prediction?.winningTeamId || prediction.selectedTeamScore === undefined || !prediction.endingPhase) {
+function renderKnockoutPredictionSummary(
+  game: Game,
+  prediction: Prediction | undefined,
+  result: GameResult | undefined,
+) {
+  if (
+    !prediction?.winningTeamId ||
+    prediction.selectedTeamScore === undefined ||
+    !prediction.endingPhase
+  ) {
     return "Not predicted";
   }
 
@@ -286,29 +341,50 @@ function renderKnockoutPredictionSummary(game: Game, prediction: Prediction | un
   `;
 }
 
-function knockoutOutcomeClass(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
+function knockoutOutcomeClass(
+  game: Game,
+  prediction: Prediction | undefined,
+  result: GameResult | undefined,
+) {
   if (!prediction?.winningTeamId || !result) {
     return "";
   }
 
-  return prediction.winningTeamId === resultWinningTeamId(game, result) ? "outcome-correct" : "outcome-wrong";
+  return prediction.winningTeamId === resultWinningTeamId(game, result)
+    ? "outcome-correct"
+    : "outcome-wrong";
 }
 
-function pointsEarned(game: Game, prediction: Prediction | undefined, result: GameResult | undefined) {
+function pointsEarned(
+  game: Game,
+  prediction: Prediction | undefined,
+  result: GameResult | undefined,
+) {
   if (!prediction || !result) {
     return 0;
   }
 
   if (isKnockoutGame(game)) {
-    if (!prediction.winningTeamId || prediction.selectedTeamScore === undefined || !prediction.endingPhase) {
+    if (
+      !prediction.winningTeamId ||
+      prediction.selectedTeamScore === undefined ||
+      !prediction.endingPhase
+    ) {
       return 0;
     }
 
-    const winnerExact = prediction.winningTeamId === resultWinningTeamId(game, result) ? 1 : 0;
-    const selectedScore = selectedTeamScoreForResult(game, result, prediction.winningTeamId);
+    const winnerExact =
+      prediction.winningTeamId === resultWinningTeamId(game, result) ? 1 : 0;
+    const selectedScore = selectedTeamScoreForResult(
+      game,
+      result,
+      prediction.winningTeamId,
+    );
     const scoreExact = selectedScore === prediction.selectedTeamScore ? 1 : 0;
     const phaseExact =
-      result.endingPhase && prediction.endingPhase === result.endingPhase && (winnerExact || prediction.endingPhase === "pks")
+      result.endingPhase &&
+      prediction.endingPhase === result.endingPhase &&
+      (winnerExact || prediction.endingPhase === "pks")
         ? 1
         : 0;
 
@@ -318,7 +394,8 @@ function pointsEarned(game: Game, prediction: Prediction | undefined, result: Ga
   const homeExact = prediction.homeScore === result.homeScore ? 1 : 0;
   const awayExact = prediction.awayScore === result.awayScore ? 1 : 0;
   const outcomeExact =
-    scoreOutcome(prediction.homeScore, prediction.awayScore) === scoreOutcome(result.homeScore, result.awayScore)
+    scoreOutcome(prediction.homeScore, prediction.awayScore) ===
+    scoreOutcome(result.homeScore, result.awayScore)
       ? 1
       : 0;
 
@@ -355,9 +432,9 @@ function gameIsClosed(game: Game, set: GameSet) {
 function gameHasUpcomingEarlyLock(game: Game, set: GameSet) {
   return Boolean(
     set.isKnockout &&
-      set.games.length > 1 &&
-      set.games[0]?.id === game.id &&
-      !deadlineIsClosed(gamePredictionDeadline(game, set)),
+    set.games.length > 1 &&
+    set.games[0]?.id === game.id &&
+    !deadlineIsClosed(gamePredictionDeadline(game, set)),
   );
 }
 
@@ -366,11 +443,18 @@ function gameCardSelector(gameId: string) {
 }
 
 function gameCardTop(gameId: string) {
-  return document.querySelector<HTMLElement>(gameCardSelector(gameId))?.getBoundingClientRect().top;
+  return document
+    .querySelector<HTMLElement>(gameCardSelector(gameId))
+    ?.getBoundingClientRect().top;
 }
 
-function renderKeepingGameInPlace(gameId: string, targetTop = gameCardTop(gameId)) {
-  const beforeCard = document.querySelector<HTMLElement>(gameCardSelector(gameId));
+function renderKeepingGameInPlace(
+  gameId: string,
+  targetTop = gameCardTop(gameId),
+) {
+  const beforeCard = document.querySelector<HTMLElement>(
+    gameCardSelector(gameId),
+  );
   const beforeTop = targetTop ?? beforeCard?.getBoundingClientRect().top;
 
   render();
@@ -379,7 +463,9 @@ function renderKeepingGameInPlace(gameId: string, targetTop = gameCardTop(gameId
     return;
   }
 
-  const afterCard = document.querySelector<HTMLElement>(gameCardSelector(gameId));
+  const afterCard = document.querySelector<HTMLElement>(
+    gameCardSelector(gameId),
+  );
   const scroller = afterCard?.closest<HTMLElement>(".matches-scroll");
 
   if (!afterCard || !scroller) {
@@ -389,7 +475,11 @@ function renderKeepingGameInPlace(gameId: string, targetTop = gameCardTop(gameId
   scroller.scrollTop += afterCard.getBoundingClientRect().top - beforeTop;
 }
 
-function setMessage(message: string, anchoredGameId?: string, anchorTop?: number) {
+function setMessage(
+  message: string,
+  anchoredGameId?: string,
+  anchorTop?: number,
+) {
   state.message = message;
   if (anchoredGameId) {
     renderKeepingGameInPlace(anchoredGameId, anchorTop);
@@ -411,7 +501,9 @@ function jumpTargetForSet(set: GameSet, now = Date.now()) {
 
   return (
     gamesByKickoff.find(
-      ({ kickoff }) => now >= kickoff - currentGameWindowBeforeMs && now <= kickoff + currentGameWindowAfterMs,
+      ({ kickoff }) =>
+        now >= kickoff - currentGameWindowBeforeMs &&
+        now <= kickoff + currentGameWindowAfterMs,
     )?.game ??
     gamesByKickoff.find(({ kickoff }) => kickoff > now)?.game ??
     null
@@ -476,20 +568,29 @@ function localPredictionsStorageKey(email: string) {
 function loadLocalPredictions(email: string): PredictionsByGame {
   try {
     const stored = localStorage.getItem(localPredictionsStorageKey(email));
-    const seedPredictions = localVerificationPredictions[normalizeEmail(email)] ?? {};
-    return stored ? { ...seedPredictions, ...(JSON.parse(stored) as PredictionsByGame) } : seedPredictions;
+    const seedPredictions =
+      localVerificationPredictions[normalizeEmail(email)] ?? {};
+    return stored
+      ? { ...seedPredictions, ...(JSON.parse(stored) as PredictionsByGame) }
+      : seedPredictions;
   } catch {
     return localVerificationPredictions[normalizeEmail(email)] ?? {};
   }
 }
 
 function saveLocalPredictions(email: string, predictions: PredictionsByGame) {
-  localStorage.setItem(localPredictionsStorageKey(email), JSON.stringify(predictions));
+  localStorage.setItem(
+    localPredictionsStorageKey(email),
+    JSON.stringify(predictions),
+  );
 }
 
 function loadAllLocalPredictions() {
   return Object.fromEntries(
-    participants.map((participant) => [participant.email, loadLocalPredictions(participant.email)] as const),
+    participants.map(
+      (participant) =>
+        [participant.email, loadLocalPredictions(participant.email)] as const,
+    ),
   );
 }
 
@@ -501,7 +602,10 @@ async function readJsonResponse(response: Response) {
   return response.json();
 }
 
-async function fetchPredictions(email: string, options: { silent?: boolean } = {}) {
+async function fetchPredictions(
+  email: string,
+  options: { silent?: boolean } = {},
+) {
   if (runningStandaloneViteDev()) {
     state.predictions = loadLocalPredictions(email);
     state.matchResults = seedMatchResults;
@@ -530,7 +634,9 @@ async function fetchPredictions(email: string, options: { silent?: boolean } = {
 
     if (!response.ok) {
       if (response.status === 403) {
-        rejectStoredEmail(payload.error ?? "This email is not on the allowed list.");
+        rejectStoredEmail(
+          payload.error ?? "This email is not on the allowed list.",
+        );
       }
       throw new Error(payload.error ?? "Could not load predictions.");
     }
@@ -546,7 +652,8 @@ async function fetchPredictions(email: string, options: { silent?: boolean } = {
     }
   } catch (error) {
     if (state.email && !options.silent) {
-      state.message = error instanceof Error ? error.message : "Could not load predictions.";
+      state.message =
+        error instanceof Error ? error.message : "Could not load predictions.";
     }
   } finally {
     if (!options.silent) {
@@ -563,7 +670,11 @@ async function fetchLeaderboard() {
 
   if (runningStandaloneViteDev()) {
     const predictionsByEmail = loadAllLocalPredictions();
-    state.leaderboard = buildLeaderboard(participants, predictionsByEmail, state.matchResults);
+    state.leaderboard = buildLeaderboard(
+      participants,
+      predictionsByEmail,
+      state.matchResults,
+    );
     state.predictionMatrix = canViewPredictionMatrix()
       ? { participants: [...participants], predictionsByEmail }
       : null;
@@ -577,9 +688,12 @@ async function fetchLeaderboard() {
   render();
 
   try {
-    const response = await fetch(`/api/leaderboard?email=${encodeURIComponent(state.email)}`, {
-      headers: authHeaders(),
-    });
+    const response = await fetch(
+      `/api/leaderboard?email=${encodeURIComponent(state.email)}`,
+      {
+        headers: authHeaders(),
+      },
+    );
     const payload = await readJsonResponse(response);
 
     if (!response.ok) {
@@ -587,11 +701,14 @@ async function fetchLeaderboard() {
     }
 
     state.leaderboard = payload.leaderboard ?? [];
-    state.predictionMatrix = canViewPredictionMatrix() ? (payload.predictionMatrix ?? null) : null;
+    state.predictionMatrix = canViewPredictionMatrix()
+      ? (payload.predictionMatrix ?? null)
+      : null;
     state.resultsCount = payload.resultsCount ?? 0;
     state.leaderboardLoaded = true;
   } catch (error) {
-    state.message = error instanceof Error ? error.message : "Could not load leaderboard.";
+    state.message =
+      error instanceof Error ? error.message : "Could not load leaderboard.";
   } finally {
     state.leaderboardLoading = false;
     render();
@@ -607,43 +724,75 @@ async function savePrediction(game: Game) {
   const gameSet = gameSetForGame(game);
   const result = resultForGame(game.id);
   if (result) {
-    setMessage(`${game.homeTeam} vs ${game.awayTeam} is final. Predictions are locked.`, game.id, anchorTop);
+    setMessage(
+      `${game.homeTeam} vs ${game.awayTeam} is final. Predictions are locked.`,
+      game.id,
+      anchorTop,
+    );
     return;
   }
 
   if (gameSet && gameIsClosed(game, gameSet)) {
     const deadline = gamePredictionDeadline(game, gameSet);
-    setMessage(`${game.homeTeam} vs ${game.awayTeam} closed ${deadline ? formatDeadline(deadline) : "before kickoff"}.`, game.id, anchorTop);
+    setMessage(
+      `${game.homeTeam} vs ${game.awayTeam} closed ${deadline ? formatDeadline(deadline) : "before kickoff"}.`,
+      game.id,
+      anchorTop,
+    );
     return;
   }
 
-  const homeInput = document.querySelector<HTMLInputElement>(`#${game.id}-home`);
-  const awayInput = document.querySelector<HTMLInputElement>(`#${game.id}-away`);
+  const homeInput = document.querySelector<HTMLInputElement>(
+    `#${game.id}-home`,
+  );
+  const awayInput = document.querySelector<HTMLInputElement>(
+    `#${game.id}-away`,
+  );
   const knockout = isKnockoutGame(game);
-  const winnerInput = document.querySelector<HTMLInputElement>(`#${game.id}-winner`);
-  const selectedScoreInput = document.querySelector<HTMLInputElement>(`#${game.id}-selected-score`);
-  const phaseInput = document.querySelector<HTMLInputElement>(`#${game.id}-ending-phase`);
+  const winnerInput = document.querySelector<HTMLInputElement>(
+    `#${game.id}-winner`,
+  );
+  const selectedScoreInput = document.querySelector<HTMLInputElement>(
+    `#${game.id}-selected-score`,
+  );
+  const phaseInput = document.querySelector<HTMLInputElement>(
+    `#${game.id}-ending-phase`,
+  );
   const winningTeamId = Number(winnerInput?.value);
   const selectedTeamScore = Number(selectedScoreInput?.value);
   const endingPhase = phaseInput?.value as EndingPhase | undefined;
-  const homeScore = knockout && winningTeamId === game.homeTeamId ? selectedTeamScore : Number(homeInput?.value);
-  const awayScore = knockout && winningTeamId === game.awayTeamId ? selectedTeamScore : Number(awayInput?.value);
+  const homeScore =
+    knockout && winningTeamId === game.homeTeamId
+      ? selectedTeamScore
+      : Number(homeInput?.value);
+  const awayScore =
+    knockout && winningTeamId === game.awayTeamId
+      ? selectedTeamScore
+      : Number(awayInput?.value);
 
-  if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore) || homeScore < 0 || awayScore < 0) {
+  if (
+    !Number.isInteger(homeScore) ||
+    !Number.isInteger(awayScore) ||
+    homeScore < 0 ||
+    awayScore < 0
+  ) {
     setMessage("Use whole-number scores.", game.id, anchorTop);
     return;
   }
 
   if (
     knockout &&
-    (winningTeamId !== game.homeTeamId &&
-      winningTeamId !== game.awayTeamId ||
+    ((winningTeamId !== game.homeTeamId && winningTeamId !== game.awayTeamId) ||
       !Number.isInteger(selectedTeamScore) ||
       selectedTeamScore < 0 ||
       !endingPhase ||
       !Object.keys(endingPhaseLabels).includes(endingPhase))
   ) {
-    setMessage("Pick a winner, that team's score, and the ending phase.", game.id, anchorTop);
+    setMessage(
+      "Pick a winner, that team's score, and the ending phase.",
+      game.id,
+      anchorTop,
+    );
     return;
   }
 
@@ -703,7 +852,8 @@ async function savePrediction(game: Game) {
     state.leaderboardLoaded = false;
     state.message = "";
   } catch (error) {
-    state.message = error instanceof Error ? error.message : "Could not save prediction.";
+    state.message =
+      error instanceof Error ? error.message : "Could not save prediction.";
   } finally {
     renderKeepingGameInPlace(game.id, anchorTop);
   }
@@ -786,11 +936,16 @@ function renderLogin() {
     </main>
   `;
 
-  document.querySelector<HTMLFormElement>("#login-form")?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget as HTMLFormElement);
-    login(String(form.get("email") ?? ""), String(form.get("access-token") ?? ""));
-  });
+  document
+    .querySelector<HTMLFormElement>("#login-form")
+    ?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget as HTMLFormElement);
+      login(
+        String(form.get("email") ?? ""),
+        String(form.get("access-token") ?? ""),
+      );
+    });
 }
 
 function renderGame(game: Game) {
@@ -811,32 +966,56 @@ function renderGame(game: Game) {
   const selectedScoreValue = prediction?.selectedTeamScore ?? "";
   const winnerValue = prediction?.winningTeamId ?? "";
   const endingPhaseValue = prediction?.endingPhase ?? "regular";
-  const knockoutWinnerResultClass = knockoutWinnerClass(game, prediction, result);
-  const knockoutSelectedScoreResultClass = knockoutSelectedScoreClass(game, prediction, result);
-  const knockoutEndingPhaseResultClass = knockoutEndingPhaseClass(game, prediction, result);
+  const knockoutWinnerResultClass = knockoutWinnerClass(
+    game,
+    prediction,
+    result,
+  );
+  const knockoutSelectedScoreResultClass = knockoutSelectedScoreClass(
+    game,
+    prediction,
+    result,
+  );
+  const knockoutEndingPhaseResultClass = knockoutEndingPhaseClass(
+    game,
+    prediction,
+    result,
+  );
   const homeResultClass =
-    result && prediction ? (prediction.homeScore === result.homeScore ? "score-correct" : "score-wrong") : "";
+    result && prediction
+      ? prediction.homeScore === result.homeScore
+        ? "score-correct"
+        : "score-wrong"
+      : "";
   const awayResultClass =
-    result && prediction ? (prediction.awayScore === result.awayScore ? "score-correct" : "score-wrong") : "";
+    result && prediction
+      ? prediction.awayScore === result.awayScore
+        ? "score-correct"
+        : "score-wrong"
+      : "";
   const predictedOutcome = knockout
     ? knockoutPredictionLabel(game, prediction)
     : prediction
       ? outcomeLabel(game, prediction.homeScore, prediction.awayScore)
       : "";
-  const outcomeResultClass =
-    knockout
-      ? ""
-      : result && prediction
-      ? scoreOutcome(prediction.homeScore, prediction.awayScore) === scoreOutcome(result.homeScore, result.awayScore)
+  const outcomeResultClass = knockout
+    ? ""
+    : result && prediction
+      ? scoreOutcome(prediction.homeScore, prediction.awayScore) ===
+        scoreOutcome(result.homeScore, result.awayScore)
         ? "outcome-correct"
         : "outcome-wrong"
       : "";
   const earnedPoints = pointsEarned(game, prediction, result);
   const maxPoints = knockout ? 4 : 3;
   const savedLabel = prediction
-    ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(prediction.updatedAt))
+    ? new Intl.DateTimeFormat(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(prediction.updatedAt))
     : "";
-  const earlyLockClass = gameSet && gameHasUpcomingEarlyLock(game, gameSet) ? "early-lock" : "";
+  const earlyLockClass =
+    gameSet && gameHasUpcomingEarlyLock(game, gameSet) ? "early-lock" : "";
 
   return `
     <article class="game-card ${earlyLockClass} ${isFinal ? "final" : ""}" data-game-card-id="${game.id}">
@@ -863,7 +1042,7 @@ function renderGame(game: Game) {
                 ${renderTeamLink(game.awayTeamId, game.awayTeam)}
               </strong>
             </div>`
-          : ""
+            : ""
       }
       ${
         knockout
@@ -949,13 +1128,20 @@ function updatePredictedOutcome(game: Game) {
   outcome.classList.remove("outcome-correct", "outcome-wrong");
 
   if (isKnockoutGame(game)) {
-    const winnerInput = document.querySelector<HTMLInputElement>(`#${game.id}-winner`);
-    const selectedScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-selected-score`));
-    const endingPhase = document.querySelector<HTMLInputElement>(`#${game.id}-ending-phase`)?.value as EndingPhase | undefined;
+    const winnerInput = document.querySelector<HTMLInputElement>(
+      `#${game.id}-winner`,
+    );
+    const selectedScore = inputScore(
+      document.querySelector<HTMLInputElement>(`#${game.id}-selected-score`),
+    );
+    const endingPhase = document.querySelector<HTMLInputElement>(
+      `#${game.id}-ending-phase`,
+    )?.value as EndingPhase | undefined;
     const winningTeamId = Number(winnerInput?.value);
 
     if (
-      (winningTeamId !== game.homeTeamId && winningTeamId !== game.awayTeamId) ||
+      (winningTeamId !== game.homeTeamId &&
+        winningTeamId !== game.awayTeamId) ||
       selectedScore === null ||
       !endingPhase
     ) {
@@ -967,13 +1153,21 @@ function updatePredictedOutcome(game: Game) {
 
     const result = resultForGame(game.id);
     if (result) {
-      outcome.classList.add(winningTeamId === resultWinningTeamId(game, result) ? "outcome-correct" : "outcome-wrong");
+      outcome.classList.add(
+        winningTeamId === resultWinningTeamId(game, result)
+          ? "outcome-correct"
+          : "outcome-wrong",
+      );
     }
     return;
   }
 
-  const homeScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-home`));
-  const awayScore = inputScore(document.querySelector<HTMLInputElement>(`#${game.id}-away`));
+  const homeScore = inputScore(
+    document.querySelector<HTMLInputElement>(`#${game.id}-home`),
+  );
+  const awayScore = inputScore(
+    document.querySelector<HTMLInputElement>(`#${game.id}-away`),
+  );
 
   if (homeScore === null || awayScore === null) {
     outcomeValue.textContent = "Not predicted";
@@ -988,7 +1182,8 @@ function updatePredictedOutcome(game: Game) {
   }
 
   outcome.classList.add(
-    scoreOutcome(homeScore, awayScore) === scoreOutcome(result.homeScore, result.awayScore)
+    scoreOutcome(homeScore, awayScore) ===
+      scoreOutcome(result.homeScore, result.awayScore)
       ? "outcome-correct"
       : "outcome-wrong",
   );
@@ -1037,7 +1232,11 @@ function canViewPredictionMatrix() {
 }
 
 function predictionMatrixPayload() {
-  if (state.activeView === "predictionMatrix" && !state.leaderboardLoaded && !state.leaderboardLoading) {
+  if (
+    state.activeView === "predictionMatrix" &&
+    !state.leaderboardLoaded &&
+    !state.leaderboardLoading
+  ) {
     queueMicrotask(fetchLeaderboard);
   }
 
@@ -1045,7 +1244,11 @@ function predictionMatrixPayload() {
 }
 
 function renderLeaderboard() {
-  if (state.activeView === "leaderboard" && !state.leaderboardLoaded && !state.leaderboardLoading) {
+  if (
+    state.activeView === "leaderboard" &&
+    !state.leaderboardLoaded &&
+    !state.leaderboardLoading
+  ) {
     queueMicrotask(fetchLeaderboard);
   }
 
@@ -1111,7 +1314,8 @@ function predictionOutcomeClass(
     return "";
   }
 
-  return scoreOutcome(prediction.homeScore, prediction.awayScore) === scoreOutcome(result.homeScore, result.awayScore)
+  return scoreOutcome(prediction.homeScore, prediction.awayScore) ===
+    scoreOutcome(result.homeScore, result.awayScore)
     ? "outcome-correct"
     : "outcome-wrong";
 }
@@ -1135,21 +1339,26 @@ function renderPredictionCell(
 
   if (isKnockoutGame(game)) {
     const winnerClass = knockoutWinnerClass(game, prediction, result);
-    const selectedScoreClass = knockoutSelectedScoreClass(game, prediction, result);
+    const selectedScoreClass = knockoutSelectedScoreClass(
+      game,
+      prediction,
+      result,
+    );
     const endingPhaseClass = knockoutEndingPhaseClass(game, prediction, result);
 
     return `
       <td class="prediction-matrix-cell ${knockoutOutcomeClass(game, prediction, result)}">
         <span class="knockout-pick-cell">
-          <strong class="knockout-summary-part ${winnerClass}">${teamNameForId(
-            game,
-            prediction.winningTeamId,
-          ) || "TBD"}</strong>
+          <strong class="knockout-summary-part ${winnerClass}">${
+            teamNameForId(game, prediction.winningTeamId) || "TBD"
+          }</strong>
           <span>
             <span class="knockout-summary-part ${selectedScoreClass}">${prediction.selectedTeamScore ?? "-"}</span>
             <span class="score-separator">·</span>
             <span class="knockout-summary-part ${endingPhaseClass}">${
-              prediction.endingPhase ? endingPhaseLabels[prediction.endingPhase] : "TBD"
+              prediction.endingPhase
+                ? endingPhaseLabels[prediction.endingPhase]
+                : "TBD"
             }</span>
           </span>
         </span>
@@ -1157,8 +1366,12 @@ function renderPredictionCell(
     `;
   }
 
-  const homeClass = result ? scorePartClass(prediction.homeScore, result.homeScore) : "";
-  const awayClass = result ? scorePartClass(prediction.awayScore, result.awayScore) : "";
+  const homeClass = result
+    ? scorePartClass(prediction.homeScore, result.homeScore)
+    : "";
+  const awayClass = result
+    ? scorePartClass(prediction.awayScore, result.awayScore)
+    : "";
 
   return `
     <td class="prediction-matrix-cell ${predictionOutcomeClass(prediction, result)}">
@@ -1235,13 +1448,20 @@ function renderPredictionMatrix(activeSet: GameSet) {
                           <td class="final-matrix-cell">${result ? `${result.homeScore}-${result.awayScore}` : "TBD"}</td>
                           ${matrixParticipants
                             .map((participant) =>
-                              renderPredictionCell(game, result, predictionsByEmail, participant, revealPicks),
+                              renderPredictionCell(
+                                game,
+                                result,
+                                predictionsByEmail,
+                                participant,
+                                revealPicks,
+                              ),
                             )
                             .join("")}
                         </tr>
                       `;
                     })
-                    .concat(`
+                    .concat(
+                      `
                       <tr class="prediction-total-row">
                         <th scope="row" class="game-column">
                           <strong>Total</strong>
@@ -1259,7 +1479,8 @@ function renderPredictionMatrix(activeSet: GameSet) {
                           )
                           .join("")}
                       </tr>
-                    `)
+                    `,
+                    )
                     .join("")
                 : `<tr><td colspan="${Math.max(2, matrixParticipants.length + 2)}">No picks loaded yet.</td></tr>`
             }
@@ -1276,13 +1497,18 @@ function renderDashboard() {
     state.activeView = "predictions";
   }
 
-  const activeSet = gameSets.find((set) => set.id === state.activeSetId) ?? gameSets[0];
+  const activeSet =
+    gameSets.find((set) => set.id === state.activeSetId) ?? gameSets[0];
   const activeDeadline = activeSet ? nextPredictionDeadline(activeSet) : null;
   const activeSetClosed = activeSet ? sectionIsClosed(activeSet) : false;
   const activeSavedCount = activeSet ? completedCount(activeSet.games) : 0;
   const activeGamesCount = activeSet?.games.length ?? 0;
-  const jumpTargetGame = activeSet && activeSetClosed ? jumpTargetForSet(activeSet) : null;
-  const progress = activeGamesCount > 0 ? Math.round((activeSavedCount / activeGamesCount) * 100) : 0;
+  const jumpTargetGame =
+    activeSet && activeSetClosed ? jumpTargetForSet(activeSet) : null;
+  const progress =
+    activeGamesCount > 0
+      ? Math.round((activeSavedCount / activeGamesCount) * 100)
+      : 0;
 
   app!.innerHTML = `
     <main class="app-shell">
@@ -1351,76 +1577,120 @@ function renderDashboard() {
     </main>
   `;
 
-  document.querySelector<HTMLButtonElement>("#logout")?.addEventListener("click", logout);
-  document.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const nextView = (button.dataset.view as ActiveView | undefined) ?? state.activeView;
-      state.activeView = nextView === "predictionMatrix" && !canViewPredictionMatrix() ? "predictions" : nextView;
-      render();
+  document
+    .querySelector<HTMLButtonElement>("#logout")
+    ?.addEventListener("click", logout);
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-view]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const nextView =
+          (button.dataset.view as ActiveView | undefined) ?? state.activeView;
+        state.activeView =
+          nextView === "predictionMatrix" && !canViewPredictionMatrix()
+            ? "predictions"
+            : nextView;
+        render();
+      });
     });
-  });
-  document.querySelectorAll<HTMLButtonElement>("[data-set-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const nextSet = gameSets.find((set) => set.id === button.dataset.setId);
-      state.activeSetId = nextSet?.id ?? state.activeSetId;
-      render();
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-set-id]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const nextSet = gameSets.find((set) => set.id === button.dataset.setId);
+        state.activeSetId = nextSet?.id ?? state.activeSetId;
+        render();
+      });
     });
-  });
-  document.querySelectorAll<HTMLButtonElement>("[data-game-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const game = gameSets.flatMap((set) => set.games).find((item) => item.id === button.dataset.gameId);
-      if (game) {
-        savePrediction(game);
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-game-id]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const game = gameSets
+          .flatMap((set) => set.games)
+          .find((item) => item.id === button.dataset.gameId);
+        if (game) {
+          savePrediction(game);
+        }
+      });
+    });
+  document
+    .querySelector<HTMLButtonElement>("#jump-current-game")
+    ?.addEventListener("click", () => {
+      if (jumpTargetGame) {
+        jumpToGame(jumpTargetGame.id);
       }
     });
-  });
-  document.querySelector<HTMLButtonElement>("#jump-current-game")?.addEventListener("click", () => {
-    if (jumpTargetGame) {
-      jumpToGame(jumpTargetGame.id);
-    }
-  });
   activeSet.games.forEach((game) => {
     if (isKnockoutGame(game)) {
-      document.querySelectorAll<HTMLButtonElement>(`[data-winner-game-id="${game.id}"][data-winner-team-id]`).forEach((button) => {
-        button.addEventListener("click", () => {
-          const winnerInput = document.querySelector<HTMLInputElement>(`#${game.id}-winner`);
-          if (winnerInput) {
-            winnerInput.value = button.dataset.winnerTeamId ?? "";
-          }
-          document
-            .querySelectorAll<HTMLButtonElement>(`[data-winner-game-id="${game.id}"][data-winner-team-id]`)
-            .forEach((winnerButton) => {
-              winnerButton.classList.toggle("selected", winnerButton === button);
-            });
+      document
+        .querySelectorAll<HTMLButtonElement>(
+          `[data-winner-game-id="${game.id}"][data-winner-team-id]`,
+        )
+        .forEach((button) => {
+          button.addEventListener("click", () => {
+            const winnerInput = document.querySelector<HTMLInputElement>(
+              `#${game.id}-winner`,
+            );
+            if (winnerInput) {
+              winnerInput.value = button.dataset.winnerTeamId ?? "";
+            }
+            document
+              .querySelectorAll<HTMLButtonElement>(
+                `[data-winner-game-id="${game.id}"][data-winner-team-id]`,
+              )
+              .forEach((winnerButton) => {
+                winnerButton.classList.toggle(
+                  "selected",
+                  winnerButton === button,
+                );
+              });
+            updatePredictedOutcome(game);
+          });
+        });
+      document
+        .querySelector<HTMLInputElement>(`#${game.id}-selected-score`)
+        ?.addEventListener("input", () => {
           updatePredictedOutcome(game);
         });
-      });
-      document.querySelector<HTMLInputElement>(`#${game.id}-selected-score`)?.addEventListener("input", () => {
-        updatePredictedOutcome(game);
-      });
-      document.querySelectorAll<HTMLButtonElement>(`[data-ending-phase-game-id="${game.id}"][data-ending-phase]`).forEach((button) => {
-        button.addEventListener("click", () => {
-          const phaseInput = document.querySelector<HTMLInputElement>(`#${game.id}-ending-phase`);
-          if (phaseInput) {
-            phaseInput.value = button.dataset.endingPhase ?? "";
-          }
-          document
-            .querySelectorAll<HTMLButtonElement>(`[data-ending-phase-game-id="${game.id}"][data-ending-phase]`)
-            .forEach((phaseButton) => {
-              phaseButton.classList.toggle("selected", phaseButton === button);
-            });
-          updatePredictedOutcome(game);
+      document
+        .querySelectorAll<HTMLButtonElement>(
+          `[data-ending-phase-game-id="${game.id}"][data-ending-phase]`,
+        )
+        .forEach((button) => {
+          button.addEventListener("click", () => {
+            const phaseInput = document.querySelector<HTMLInputElement>(
+              `#${game.id}-ending-phase`,
+            );
+            if (phaseInput) {
+              phaseInput.value = button.dataset.endingPhase ?? "";
+            }
+            document
+              .querySelectorAll<HTMLButtonElement>(
+                `[data-ending-phase-game-id="${game.id}"][data-ending-phase]`,
+              )
+              .forEach((phaseButton) => {
+                phaseButton.classList.toggle(
+                  "selected",
+                  phaseButton === button,
+                );
+              });
+            updatePredictedOutcome(game);
+          });
         });
-      });
       return;
     }
 
-    document.querySelector<HTMLInputElement>(`#${game.id}-home`)?.addEventListener("input", () => {
-      updatePredictedOutcome(game);
-    });
-    document.querySelector<HTMLInputElement>(`#${game.id}-away`)?.addEventListener("input", () => {
-      updatePredictedOutcome(game);
-    });
+    document
+      .querySelector<HTMLInputElement>(`#${game.id}-home`)
+      ?.addEventListener("input", () => {
+        updatePredictedOutcome(game);
+      });
+    document
+      .querySelector<HTMLInputElement>(`#${game.id}-away`)
+      ?.addEventListener("input", () => {
+        updatePredictedOutcome(game);
+      });
   });
 }
 
