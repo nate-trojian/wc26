@@ -24,4 +24,11 @@ export const matchResults: readonly GameResult[] = [
     winningTeamId: 5,
     endingPhase: "pks",
   },
+  {
+    gameId: "g75",
+    homeScore: 1,
+    awayScore: 1,
+    winningTeamId: 14,
+    endingPhase: "pks",
+  },
 ];
