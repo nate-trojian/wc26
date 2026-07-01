@@ -131,7 +131,6 @@ function liveGames(now: Date, existingResults: readonly GameResult[]) {
   const existingGameIds = new Set(
     existingResults.map((result) => result.gameId),
   );
-  const livePollBeforeMs = livePollBeforeMinutes * 60 * 1000;
   const livePollAfterMs = livePollAfterMinutes * 60 * 1000;
 
   return allKnownGames().filter((game) => {
@@ -145,7 +144,7 @@ function liveGames(now: Date, existingResults: readonly GameResult[]) {
     }
 
     const elapsedMs = now.getTime() - kickoff.getTime();
-    return elapsedMs >= -livePollBeforeMs && elapsedMs <= livePollAfterMs;
+    return elapsedMs <= livePollAfterMs;
   });
 }
 
